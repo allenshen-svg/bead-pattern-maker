@@ -14,7 +14,7 @@
     .login-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 100; }
     .login-box { background: var(--sf); padding: 32px; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,.08); max-width: 360px; width: 90%; text-align: center; }
     .login-box h2 { margin-bottom: 20px; font-size: 20px; }
-    .login-box input { width: 100%; padding: 10px 14px; border: 1px solid var(--bd); border-radius: 8px; font-size: 14px; margin-bottom: 12px; outline: none; }
+    .login-box input { width: 100%; padding: 10px 14px; border: 1px solid var(--bd); border-radius: 8px; font-size: 14px; margin-bottom: 12px; outline: none; -webkit-text-security: disc; text-security: disc; }
     .login-box input:focus { border-color: var(--pri); }
     .login-box .err { color: var(--red); font-size: 13px; margin-bottom: 8px; min-height: 20px; }
 
@@ -87,7 +87,7 @@
 <div id="loginOverlay" class="login-overlay">
   <div class="login-box">
     <h2>🔐 管理后台</h2>
-    <input type="password" id="adminKeyInput" placeholder="输入管理员密钥" autofocus>
+    <input type="text" id="adminKeyInput" placeholder="输入管理员密钥" autocomplete="off" autofocus>
     <div class="err" id="loginErr"></div>
     <button class="btn btn-pri" style="width:100%;padding:10px" onclick="doLogin()">进入</button>
   </div>
