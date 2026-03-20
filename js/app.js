@@ -930,19 +930,13 @@ class BeadPatternApp {
     const palette = BEAD_PALETTES[brand].colors;
     const sorted  = Object.entries(this.pattern.colorCounts).sort((a, b) => b[1] - a[1]);
 
-    const totalBeads = this.pattern.totalBeads;
     container.innerHTML = sorted.map(([code, count]) => {
       const c = palette.find(p => p.code === code);
       if (!c) return '';
-      const pct = (count / totalBeads * 100).toFixed(1);
-      // bags: typical bag = 1000 beads
-      const bags = Math.ceil(count / 1000);
       return `<div class="legend-item">
         <div class="legend-color" style="background:${c.hex}"></div>
         <span class="legend-code">${c.code}</span>
-        <span class="legend-name">${c.name}</span>
-        <span class="legend-count">${count}颗 ${pct}%</span>
-        <span class="legend-bags">≈${bags}包</span>
+        <span class="legend-count">${count}颗</span>
       </div>`;
     }).join('');
   }
@@ -1358,8 +1352,6 @@ class BeadPatternApp {
     sorted.forEach(([code, count]) => {
       const c = palette.find(p => p.code === code);
       if (!c) return;
-      const pct = (count / totalBeads * 100).toFixed(1);
-      const bags = Math.ceil(count / 1000);
       // Color swatch
       const rgb = this.converter.hexToRgb(c.hex);
       doc.setFillColor(rgb.r, rgb.g, rgb.b);
@@ -1367,7 +1359,7 @@ class BeadPatternApp {
       doc.setDrawColor(180, 180, 180);
       doc.rect(margin, listY - 2.5, 4, 4, 'S');
       doc.setTextColor(0, 0, 0);
-      doc.text(`${code}  ${c.name}  —  ${count}颗 (${pct}%)  ≈${bags}包`, margin + 6, listY);
+      doc.text(`${code}  ${count}颗`, margin + 6, listY);
       listY += 5;
       if (listY > pageH - margin) {
         doc.addPage();
