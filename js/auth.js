@@ -446,7 +446,7 @@ function initAuthUI(authManager) {
   let _currentOrderNo = null;
   let _qrcodeWechat = '';
   let _qrcodeAlipay = '';
-  let _currentPayMethod = 'wechat';
+  let _currentPayMethod = 'alipay';
 
   async function loadPackages() {
     if (_packagesData) return _packagesData;
@@ -522,7 +522,7 @@ function initAuthUI(authManager) {
   function updateQrImage() {
     const img = $('payQrImage');
     if (!img) return;
-    const src = _currentPayMethod === 'wechat' ? _qrcodeWechat : _qrcodeAlipay;
+    const src = _qrcodeAlipay;
     img.src = src || '';
     if (!src) img.alt = '收款码未配置，请联系管理员';
   }
@@ -559,8 +559,7 @@ function initAuthUI(authManager) {
       }
     }
 
-    _currentPayMethod = 'wechat';
-    document.querySelectorAll('.pay-qr-tab').forEach(t => t.classList.toggle('active', t.dataset.method === 'wechat'));
+    _currentPayMethod = 'alipay';
     updateQrImage();
     showStep(2);
   }
@@ -571,15 +570,6 @@ function initAuthUI(authManager) {
     const closeBtn = $('rechargeClose');
     if (closeBtn) closeBtn.onclick = hideRechargeModal;
     rechargeModal.addEventListener('click', e => { if (e.target === rechargeModal) hideRechargeModal(); });
-
-    // QR tab switching
-    document.querySelectorAll('.pay-qr-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        _currentPayMethod = tab.dataset.method;
-        document.querySelectorAll('.pay-qr-tab').forEach(t => t.classList.toggle('active', t === tab));
-        updateQrImage();
-      });
-    });
 
     // "我已转账" button
     const payDoneBtn = $('payDoneBtn');
