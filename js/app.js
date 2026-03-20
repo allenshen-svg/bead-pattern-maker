@@ -88,6 +88,10 @@ class BeadPatternApp {
     this.pattern   = null;
     this.isPro     = true;     // 全功能免费版
 
+    // Auth system
+    this.auth = new AuthManager();
+    this.authUI = null;
+
     // View state
     this.zoom  = 1;
     this.panX  = 0;
@@ -124,6 +128,9 @@ class BeadPatternApp {
     this._bind();
     this._updateUsageUI();
     this._renderHistory();
+
+    // Init auth UI
+    this.authUI = initAuthUI(this.auth);
   }
 
   /* ═══════════ Event binding ═══════════ */
@@ -181,9 +188,32 @@ class BeadPatternApp {
     });
 
     // ── Buttons ──
-    $('convertBtn').addEventListener('click', () => this._generate());
-    $('exportBtn').addEventListener('click',  () => this._export());
-    $('exportPdfBtn').addEventListener('click', () => this._exportPDF());
+    $('convertBtn').addEventListener('click', () => {
+      if (this.auth.needsLogin('generate')) {
+        this.authUI.showAuthModal('注册后即可继续生成图案，新用户赠送 3 个豆子');
+        return;
+      }
+      if (this.auth.isLoggedIn && this.auth.firstGenDone && this.auth.needsBeans()) {
+        $('beansCount').textContent = this.auth.beans;
+        $('noBeansModal').classList.remove('hidden');
+        return;
+      }
+      this._generate();
+    });
+    $('exportBtn').addEventListener('click', () => {
+      if (this.auth.needsLogin('download')) {
+        this.authUI.showAuthModal('注册后即可下载高清图片');
+        return;
+      }
+      this._export();
+    });
+    $('exportPdfBtn').addEventListener('click', () => {
+      if (this.auth.needsLogin('pdf')) {
+        this.authUI.showAuthModal('注册后即可导出 PDF 分板图');
+        return;
+      }
+      this._exportPDF();
+    });
 
     // ── Comparison toggle ──
     $('compareBtn').addEventListener('click', () => this._toggleCompare());
@@ -557,6 +587,19 @@ class BeadPatternApp {
       document.getElementById('exportBtn').disabled = false;
       document.getElementById('exportPdfBtn').disabled = false;
       document.getElementById('compareBtn').classList.remove('hidden');
+
+      // Bean system: consume bean (skip first free gen)
+      if (this.auth.isLoggedIn && this.auth.firstGenDone) {
+        this.auth.consumeBean('生成拼豆图案').then(() => {
+          if (this.authUI) this.authUI.updateUserUI();
+        });
+      }
+      this.auth.markFirstGen();
+
+      // Start 1-min timer to prompt registration
+      this.auth.startPatternTimer(() => {
+        if (this.authUI) this.authUI.showAuthModal('注册即可保存作品，新用户赠送 3 个豆子');
+      });
 
       // Consume one use
       if (!this.isPro) UsageLimiter.consume();
