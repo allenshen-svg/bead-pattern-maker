@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="免费在线拼豆图案生成器，上传照片自动转换为MARD拼豆珠子图纸，支持颜色匹配、网格导出">
+  <meta name="keywords" content="拼豆,拼豆图案,拼豆图纸,bead pattern,perler beads,MARD,像素画,拼豆生成器">
+  <meta property="og:title" content="拼豆图案生成器 | 免费在线拼豆图纸制作工具">
+  <meta property="og:description" content="免费在线拼豆图案生成器，上传照片自动转换为MARD拼豆珠子图纸，支持CIE-Lab精准配色、PDF分板导出、材料清单">
+  <meta property="og:type" content="website">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
+  <title>拼豆图案生成器 | 免费在线拼豆图纸制作工具</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- 51.la 统计 -->
+  <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js?id=3129971&ck=3129971"></script>
+</head>
+<body>
+
+<header>
+  <h1>🎨 拼豆图案生成器</h1>
+  <p class="subtitle">上传图片，自动生成拼豆珠子图案</p>
+  <div class="highlights-strip">
+    <span class="hl-tag">🎯 CIE-Lab 精准配色</span>
+    <span class="hl-tag">🏷️ 三大品牌色卡</span>
+    <span class="hl-tag">✂️ 图片裁剪</span>
+    <span class="hl-tag">🖼️ 原图对比</span>
+    <span class="hl-tag">📄 PDF 分板导出</span>
+    <span class="hl-tag">📋 材料清单</span>
+    <span class="hl-tag">🔍 缩放漫游</span>
+    <span class="hl-tag">📱 移动端适配</span>
+    <span class="hl-tag">🖼️ 素材图库</span>
+  </div>
+</header>
+
+<main>
+  <!-- ── Left sidebar: controls ── -->
+  <aside class="controls">
+    <!-- Upload -->
+    <section class="upload-section">
+      <div id="dropZone" class="drop-zone">
+        <p>📷 拖拽图片到这里<br>或 <b>点击上传</b></p>
+        <input type="file" id="fileInput" accept="image/*" hidden>
+      </div>
+      <button id="galleryBtn" class="btn btn-gallery">🖼️ 素材图库</button>
+      <div id="previewContainer" class="preview-container hidden">
+        <div class="preview-img-wrap">
+          <img id="previewImage" alt="预览">
+          <div id="cropOverlay" class="crop-overlay hidden">
+            <div id="cropBox" class="crop-box"></div>
+          </div>
+        </div>
+        <button id="cropToggle" class="btn btn-secondary crop-btn" style="font-size:12px;padding:5px;margin-top:4px">✂️ 裁剪图片</button>
+        <div id="cropActions" class="crop-actions hidden">
+          <button id="cropApply" class="btn btn-primary" style="font-size:12px;padding:5px;flex:1">✅ 应用裁剪</button>
+          <button id="cropCancel" class="btn btn-secondary" style="font-size:12px;padding:5px;flex:1">✖ 取消</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section class="settings-section">
+      <h3>参数设置</h3>
+
+      <div class="control-group">
+        <label>珠子品牌</label>
+        <select id="brandSelect">
+          <option value="mard" selected>MARD 拼豆</option>
+          <option value="perler">Perler Beads</option>
+          <option value="hama">Hama Beads</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>宽度（珠子数）: <span id="widthValue">50</span></label>
+        <input type="range" id="widthSlider" min="10" max="200" value="50">
+      </div>
+
+      <div class="control-group">
+        <label>高度（珠子数）: <span id="heightValue">--</span></label>
+        <small>根据图片比例自动计算</small>
+      </div>
+
+      <div class="control-group">
+        <label>最大颜色数: <span id="maxColorsValue">不限</span></label>
+        <input type="range" id="maxColorsSlider" min="0" max="50" value="0">
+        <small>0 = 不限制，使用全部调色板</small>
+      </div>
+    </section>
+
+    <!-- Image Adjustments -->
+    <section class="settings-section">
+      <h3>图片调整</h3>
+      <div class="control-group">
+        <label>亮度: <span id="brightnessValue">0</span></label>
+        <input type="range" id="brightnessSlider" min="-100" max="100" value="0">
+      </div>
+      <div class="control-group">
+        <label>对比度: <span id="contrastValue">0</span></label>
+        <input type="range" id="contrastSlider" min="-100" max="100" value="0">
+      </div>
+      <div class="control-group">
+        <label>饱和度: <span id="saturationValue">0</span></label>
+        <input type="range" id="saturationSlider" min="-100" max="100" value="0">
+      </div>
+      <button id="resetAdjust" class="btn btn-secondary" style="font-size:12px;padding:5px">↺ 重置调整</button>
+    </section>
+
+    <!-- Display Options -->
+    <section class="settings-section">
+      <h3>显示选项</h3>
+      <div class="control-group">
+        <label><input type="checkbox" id="showCodes" checked> 显示颜色代码</label>
+      </div>
+      <div class="control-group">
+        <label><input type="checkbox" id="showGrid" checked> 显示网格线</label>
+      </div>
+      <div class="control-group">
+        <label><input type="checkbox" id="showBoardLines"> 显示拼豆板分割线 (29×29)</label>
+      </div>
+      <div class="control-group">
+        <label><input type="checkbox" id="editMode"> ✏️ 手动编辑模式</label>
+      </div>
+
+      <button id="convertBtn" class="btn btn-primary" disabled>🔄 生成图案</button>
+      <button id="exportBtn" class="btn btn-secondary" disabled>📥 导出 PNG</button>
+      <button id="exportPdfBtn" class="btn btn-secondary" disabled>📄 导出 PDF</button>
+      <button id="compareBtn" class="btn btn-secondary hidden">🔀 对比原图</button>
+
+      <div id="usageInfo" class="usage-info" hidden>
+        <span>今日剩余: <b id="remainCount">5</b> 次</span>
+      </div>
+    </section>
+
+    <!-- Stats -->
+    <section id="statsSection" class="stats-section hidden">
+      <h3>统计信息</h3>
+      <div id="statsContent"></div>
+    </section>
+
+    <!-- History -->
+    <section id="historySection" class="history-section">
+      <h3>历史记录</h3>
+      <div id="historyContent" class="history-content">
+        <p class="history-empty">暂无历史记录</p>
+      </div>
+    </section>
+  </aside>
+
+  <!-- ── Main area: pattern + legend ── -->
+  <div class="pattern-area">
+    <div class="pattern-container">
+      <canvas id="patternCanvas"></canvas>
+      <div class="empty-state" id="emptyState">
+        <div class="feature-showcase">
+          <h2>✨ 功能亮点</h2>
+          <div class="feature-grid">
+            <div class="feature-card">
+              <div class="fc-icon">🎯</div>
+              <h4>CIE-Lab 精准配色</h4>
+              <p>采用科学色差算法，每颗珠子颜色自动匹配最接近的色卡色号</p>
+            </div>
+            <div class="feature-card">
+              <div class="fc-icon">🏷️</div>
+              <h4>三大品牌支持</h4>
+              <p>内置 MARD（249色）、Perler（48色）、Hama（42色）官方色卡</p>
+            </div>
+            <div class="feature-card">
+              <div class="fc-icon">✂️</div>
+              <h4>图片裁剪</h4>
+              <p>上传后可自由框选区域，只转换你需要的部分，告别手动裁图</p>
+            </div>
+            <div class="feature-card">
+              <div class="fc-icon">🎨</div>
+              <h4>亮度 / 对比度 / 饱和度</h4>
+              <p>实时调节图片参数，优化转换效果，无需切换到其他修图软件</p>
+            </div>
+            <div class="feature-card">
+              <div class="fc-icon">📄</div>
+              <h4>PDF 分板导出</h4>
+              <p>按 29×29 拼豆板自动分页，每板独立坐标，打印即用</p>
+            </div>
+            <div class="feature-card">
+              <div class="fc-icon">📋</div>
+              <h4>材料清单</h4>
+              <p>自动统计每种颜色用量、占比和所需包数，采购一目了然</p>
+            </div>
+            <div class="feature-card">
+              <div class="fc-icon">🖼️</div>
+              <h4>原图对比</h4>
+              <p>生成后一键叠加原图，透明度可调，直观查看还原度</p>
+            </div>
+            <div class="feature-card">
+              <div class="fc-icon">🔍</div>
+              <h4>缩放 & 漫游</h4>
+              <p>滚轮缩放 + 拖拽平移 + 触屏双指缩放，轻松查看细节</p>
+            </div>
+          </div>
+          <p class="showcase-cta">👆 上传图片并点击「生成图案」开始体验</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tooltip -->
+    <div id="beadTooltip" class="bead-tooltip hidden"></div>
+
+    <!-- Bead color picker popup -->
+    <div id="beadPicker" class="bead-picker hidden">
+      <div class="bp-header">
+        <span id="bpTitle">选择颜色</span>
+        <button id="bpClose" class="bp-close">&times;</button>
+      </div>
+      <input type="text" id="bpSearch" class="bp-search" placeholder="搜索色号或名称…">
+      <div id="bpColors" class="bp-colors"></div>
+    </div>
+
+    <!-- Legend -->
+    <div id="legendSection" class="legend-section hidden">
+      <h3>颜色图例 / 材料清单</h3>
+      <div id="legendContent" class="legend-content"></div>
+    </div>
+  </div>
+</main>
+
+<!-- Gallery Modal -->
+<div id="galleryModal" class="modal-overlay hidden">
+  <div class="gallery-box">
+    <div class="gallery-header">
+      <h2>🖼️ 素材图库</h2>
+      <p class="gallery-sub">点击选择素材，一键生成拼豆图案</p>
+      <button class="modal-close" id="galleryClose">&times;</button>
+    </div>
+    <div class="gallery-tabs" id="galleryTabs"></div>
+    <div class="gallery-grid" id="galleryGrid"></div>
+  </div>
+</div>
+
+<!-- Upgrade Modal -->
+<div id="upgradeModal" class="modal-overlay hidden" style="display:none">
+
+  <div class="modal-box">
+    <button class="modal-close" id="modalClose">&times;</button>
+    <h2>🔓 升级 Pro 版</h2>
+    <p>免费版每日可生成 <b>5</b> 次，导出图带水印。</p>
+    <p>升级 Pro 解锁：</p>
+    <ul>
+      <li>✅ 无限次生成</li>
+      <li>✅ 无水印高清导出</li>
+      <li>✅ 宽度上限 200 珠子</li>
+      <li>✅ 优先客服支持</li>
+    </ul>
+    <div class="pricing">
+      <div class="price-card">
+        <div class="price-label">月卡</div>
+        <div class="price-amount">¥9.9<span>/月</span></div>
+      </div>
+      <div class="price-card featured">
+        <div class="price-badge">推荐</div>
+        <div class="price-label">年卡</div>
+        <div class="price-amount">¥68<span>/年</span></div>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:12px" id="upgradeBtn">立即升级</button>
+    <p class="modal-hint">* 升级功能即将上线，敬请期待</p>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js" integrity="sha512-qZvrmS2ekKPF2mSznTQsxqPgnpkI4DNTlrdUmIzVYC/qiocDeJAlEMhmKSyKKMOOSFliMz4JhQb2VnKsVjgTg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="js/gallery.js"></script>
+<script src="js/colors.js"></script>
+<script src="js/converter.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
