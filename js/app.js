@@ -130,7 +130,14 @@ class BeadPatternApp {
     this._renderHistory();
 
     // Init auth UI
-    this.authUI = initAuthUI(this.auth);
+    try {
+      this.authUI = initAuthUI(this.auth);
+    } catch(e) {
+      console.error('initAuthUI failed:', e);
+      // Fallback: at least show login button
+      const area = document.getElementById('userArea');
+      if (area) area.innerHTML = '<button class="btn btn-sm btn-outline" onclick="location.reload()">登录 / 注册</button>';
+    }
   }
 
   /* ═══════════ Event binding ═══════════ */
