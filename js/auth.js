@@ -599,8 +599,8 @@ function initAuthUI(authManager) {
   }
 
   // Initial UI
-  updateUserUI();
-  if (authManager.isLoggedIn) authManager.refreshUser().then(updateUserUI);
+  try { updateUserUI(); } catch(e) { console.error('updateUserUI error:', e); }
+  if (authManager.isLoggedIn) authManager.refreshUser().then(updateUserUI).catch(e => console.error('refreshUser error:', e));
 
   return { updateUserUI, showAuthModal, hideAuthModal, showRechargeModal };
 }
