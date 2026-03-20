@@ -582,7 +582,7 @@ class BeadPatternApp {
       // Start 1-min timer to prompt registration (only if not logged in)
       if (!this.auth.isLoggedIn) {
         this.auth.startPatternTimer(() => {
-          if (this.authUI) this.authUI.showAuthModal('注册即可保存作品，新用户赠送 3 个豆子');
+          if (this.authUI) this.authUI.showAuthModal('注册即可保存作品，新用户赠送 3 个豆子', true);
         });
       }
 

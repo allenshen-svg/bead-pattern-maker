@@ -198,14 +198,20 @@ function initAuthUI(authManager) {
     }
   }
 
+  let _modalForced = false;
+
   // Show auth modal
-  function showAuthModal(message) {
+  function showAuthModal(message, forced) {
     const modal = $('authModal');
     if (!modal) return;
+    _modalForced = !!forced;
     // Clear all fields and errors
     modal.querySelectorAll('input').forEach(i => { i.value = ''; i.classList.remove('input-error', 'input-ok'); });
     modal.querySelectorAll('.field-error').forEach(e => e.textContent = '');
     modal.classList.remove('hidden');
+    // Hide close button when forced
+    const closeBtn = $('authModalClose');
+    if (closeBtn) closeBtn.style.display = _modalForced ? 'none' : '';
     if (message) {
       const tip = modal.querySelector('.auth-tip');
       if (tip) tip.textContent = message;
@@ -214,6 +220,7 @@ function initAuthUI(authManager) {
   }
 
   function hideAuthModal() {
+    if (_modalForced) return;
     const modal = $('authModal');
     if (modal) modal.classList.add('hidden');
   }
@@ -347,6 +354,7 @@ function initAuthUI(authManager) {
       } else {
         setSubmitLoading(btn, false, '注册');
         hideAuthModal();
+        _modalForced = false;
         updateUserUI();
         showToast('🎉 注册成功！已赠送 3 个免费豆子');
       }
@@ -378,6 +386,7 @@ function initAuthUI(authManager) {
       } else {
         setSubmitLoading(btn, false, '登录');
         hideAuthModal();
+        _modalForced = false;
         updateUserUI();
         showToast('登录成功');
       }
