@@ -551,7 +551,7 @@ function initAuthUI(authManager) {
         const items = [`🫘 获得 <b>${pkg.beans}</b> 豆子（可生成 ${pkg.beans} 个图案）`];
         if (pkg.type === 'member') {
           items.push(`👑 解锁 <b>${pkg.days} 天</b>会员权益`);
-          items.push('🖼️ 高清导出 / 🎨 更多模板 / ⚡ 优先处理');
+          items.push('⚡ 优先处理 / 💬 专属客服');
         }
         summaryEl.innerHTML = '<div class="pbs-title">充值后您将获得:</div>' + items.map(i => `<div class="pbs-item">${i}</div>`).join('');
       } else {
