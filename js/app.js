@@ -189,15 +189,6 @@ class BeadPatternApp {
 
     // ── Buttons ──
     $('convertBtn').addEventListener('click', () => {
-      if (this.auth.needsLogin('generate')) {
-        this.authUI.showAuthModal('注册后即可继续生成图案，新用户赠送 3 个豆子');
-        return;
-      }
-      if (this.auth.isLoggedIn && this.auth.firstGenDone && this.auth.needsBeans()) {
-        $('beansCount').textContent = this.auth.beans;
-        $('noBeansModal').classList.remove('hidden');
-        return;
-      }
       this._generate();
     });
     $('exportBtn').addEventListener('click', () => {
@@ -588,18 +579,12 @@ class BeadPatternApp {
       document.getElementById('exportPdfBtn').disabled = false;
       document.getElementById('compareBtn').classList.remove('hidden');
 
-      // Bean system: consume bean (skip first free gen)
-      if (this.auth.isLoggedIn && this.auth.firstGenDone) {
-        this.auth.consumeBean('生成拼豆图案').then(() => {
-          if (this.authUI) this.authUI.updateUserUI();
+      // Start 1-min timer to prompt registration (only if not logged in)
+      if (!this.auth.isLoggedIn) {
+        this.auth.startPatternTimer(() => {
+          if (this.authUI) this.authUI.showAuthModal('注册即可保存作品，新用户赠送 3 个豆子');
         });
       }
-      this.auth.markFirstGen();
-
-      // Start 1-min timer to prompt registration
-      this.auth.startPatternTimer(() => {
-        if (this.authUI) this.authUI.showAuthModal('注册即可保存作品，新用户赠送 3 个豆子');
-      });
 
       // Consume one use
       if (!this.isPro) UsageLimiter.consume();

@@ -592,8 +592,8 @@ input[type="range"] { margin-top: 3px; }
   align-items: center;
   width: 100%;
 }
-.code-group input { flex: 1 1 auto !important; width: auto !important; min-width: 0; }
-.code-group button { white-space: nowrap; min-width: 100px; padding: 10px 12px; flex-shrink: 0; }
+.code-group input { flex: 1 1 auto !important; width: auto !important; min-width: 80px !important; }
+.code-group .btn-outline { white-space: nowrap; flex-shrink: 0; }
 .btn-full { width: 100%; padding: 10px; }
 .auth-tip {
   color: var(--tx2);

@@ -122,10 +122,6 @@ class AuthManager {
   // Check if action requires login
   needsLogin(action) {
     if (this.isLoggedIn) return false;
-    // First generation is free
-    if (action === 'generate' && !this.firstGenDone) return false;
-    // All other actions after first gen need login
-    if (action === 'generate' && this.firstGenDone) return true;
     if (action === 'download' || action === 'pdf') return true;
     return false;
   }
