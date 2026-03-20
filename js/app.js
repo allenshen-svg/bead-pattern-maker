@@ -590,6 +590,13 @@ class BeadPatternApp {
       if (!this.isPro) UsageLimiter.consume();
       this._updateUsageUI();
 
+      // Consume a bean for logged-in users
+      if (this.auth.isLoggedIn) {
+        this.auth.consumeBean('生成拼豆图案').then(res => {
+          if (this.authUI) this.authUI.updateUserUI();
+        });
+      }
+
       // Save to history
       this._saveHistory(width, brand);
 
