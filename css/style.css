@@ -958,10 +958,7 @@ input[type="range"] { margin-top: 3px; }
 .pay-order-info { font-size: 15px; color: #333; margin: 8px 0; }
 .pay-order-no { font-size: 13px; color: #888; margin-bottom: 12px; }
 .pay-order-no code, .pay-qr-note code { background: #f3f4f6; padding: 2px 8px; border-radius: 4px; font-size: 13px; font-weight: 600; color: #6366f1; user-select: all; }
-.pay-qr-tabs { display: flex; gap: 0; margin-bottom: 12px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
-.pay-qr-tab { flex: 1; padding: 8px; border: none; background: #fff; cursor: pointer; font-size: 14px; font-weight: 600; color: #666; transition: .2s; }
-.pay-qr-tab.active { background: #6366f1; color: #fff; }
-.pay-qr-tab:first-child.active { background: #07c160; }
+.pay-method-label { font-size: 15px; font-weight: 600; color: #1677ff; margin-bottom: 12px; text-align: center; }
 .pay-qr-wrap { text-align: center; padding: 16px 0; }
 .pay-qr-img { width: 220px; height: 220px; border: 2px solid #e5e7eb; border-radius: 12px; object-fit: contain; background: #fafafa; }
 .pay-qr-hint { font-size: 18px; font-weight: 600; color: #333; margin: 10px 0 4px; }
