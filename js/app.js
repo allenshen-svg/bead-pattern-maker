@@ -548,13 +548,6 @@ class BeadPatternApp {
     const srcImage = this.croppedImage || this.image;
     if (!srcImage) return;
 
-    // Free usage check
-    if (!this.isPro && UsageLimiter.getRemaining() <= 0) {
-      document.getElementById('upgradeModal').classList.remove('hidden');
-      trackEvent('limit_reached');
-      return;
-    }
-
     const btn = document.getElementById('convertBtn');
     btn.textContent = '⏳ 生成中…';
     btn.disabled = true;
