@@ -590,10 +590,22 @@ input[type="range"] { margin-top: 3px; }
   display: flex;
   gap: 8px;
   align-items: center;
-  width: 100%;
 }
-.code-group input { flex: 1 1 auto !important; width: auto !important; min-width: 80px !important; }
-.code-group button { width: auto !important; flex-shrink: 0; white-space: nowrap; margin-bottom: 0; }
+.code-group input { flex: 1; min-width: 0; }
+.send-code-btn {
+  padding: 10px 14px;
+  background: transparent;
+  border: 1px solid var(--pri);
+  color: var(--pri);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: .2s;
+}
+.send-code-btn:hover { background: var(--pri); color: #fff; }
+.send-code-btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-full { width: 100%; padding: 10px; }
 .auth-tip {
   color: var(--tx2);
