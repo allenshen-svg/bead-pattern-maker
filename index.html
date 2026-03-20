@@ -240,33 +240,28 @@
   </div>
 </div>
 
-<!-- Upgrade Modal -->
-<div id="upgradeModal" class="modal-overlay hidden" style="display:none">
-
-  <div class="modal-box">
-    <button class="modal-close" id="modalClose">&times;</button>
-    <h2>🔓 升级 Pro 版</h2>
-    <p>免费版每日可生成 <b>5</b> 次，导出图带水印。</p>
-    <p>升级 Pro 解锁：</p>
-    <ul>
-      <li>✅ 无限次生成</li>
-      <li>✅ 无水印高清导出</li>
-      <li>✅ 宽度上限 200 珠子</li>
-      <li>✅ 优先客服支持</li>
-    </ul>
-    <div class="pricing">
-      <div class="price-card">
-        <div class="price-label">月卡</div>
-        <div class="price-amount">¥9.9<span>/月</span></div>
-      </div>
-      <div class="price-card featured">
-        <div class="price-badge">推荐</div>
-        <div class="price-label">年卡</div>
-        <div class="price-amount">¥68<span>/年</span></div>
-      </div>
+<!-- Recharge Modal -->
+<div id="rechargeModal" class="modal-overlay hidden">
+  <div class="modal-box recharge-modal-box">
+    <button class="modal-close" id="rechargeClose">&times;</button>
+    <h2>🫘 豆子充值</h2>
+    <p class="recharge-balance">当前余额: <b id="rechargeCurrentBeans">0</b> 豆子</p>
+    <div class="recharge-section">
+      <h3>豆子充值包</h3>
+      <div class="recharge-grid" id="rechargeGrid"></div>
     </div>
-    <button class="btn btn-primary" style="margin-top:12px" id="upgradeBtn">立即升级</button>
-    <p class="modal-hint">* 升级功能即将上线，敬请期待</p>
+    <div class="recharge-section">
+      <h3>会员套餐 <span class="member-badge">更划算</span></h3>
+      <p class="recharge-desc">会员一次性获得大量豆子，同时解锁高清导出、更多模板</p>
+      <div class="recharge-grid" id="memberGrid"></div>
+    </div>
+    <div id="payingStatus" class="paying-status hidden">
+      <div class="pay-spinner"></div>
+      <p>正在等待支付完成…</p>
+      <p class="pay-hint">请在新窗口中完成支付，支付后将自动到账</p>
+      <button class="btn btn-secondary" id="payCheckBtn">我已支付</button>
+      <button class="btn btn-text" id="payCancelBtn">取消</button>
+    </div>
   </div>
 </div>
 
@@ -337,27 +332,16 @@
   </div>
 </div>
 
-<!-- No Beans Modal -->
+<!-- No Beans Modal (redirects to recharge) -->
 <div id="noBeansModal" class="modal-overlay hidden">
   <div class="modal-box">
     <button class="modal-close" id="noBeansClose">&times;</button>
     <h2>🫘 豆子不足</h2>
-    <p>生成图案需要消耗 1 个豆子，您当前豆子余额为 <b id="beansCount">0</b>。</p>
-    <p>成为会员每月获得豆子额度：</p>
-    <div class="pricing">
-      <div class="price-card">
-        <div class="price-label">月卡</div>
-        <div class="price-amount">¥9.9<span>/月</span></div>
-        <div class="price-desc">每月30豆子</div>
-      </div>
-      <div class="price-card featured">
-        <div class="price-badge">推荐</div>
-        <div class="price-label">年卡</div>
-        <div class="price-amount">¥68<span>/年</span></div>
-        <div class="price-desc">每月50豆子</div>
-      </div>
+    <p>生成图案需要消耗 1 个豆子，您当前余额为 <b id="beansCount">0</b> 豆。</p>
+    <p>充值豆子后即可继续使用:</p>
+    <div class="nobeans-actions">
+      <button class="btn btn-primary" id="goRechargeBtn">💰 立即充值</button>
     </div>
-    <p class="modal-hint">* 会员功能即将上线，敬请期待</p>
   </div>
 </div>
 

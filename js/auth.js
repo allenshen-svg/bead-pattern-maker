@@ -130,6 +130,32 @@ class AuthManager {
   needsBeans() {
     return this.isLoggedIn && this.beans <= 0;
   }
+
+  // ── Payment methods ──
+  async getPackages() {
+    const r = await fetch(`${API_BASE}/api/pay/packages`);
+    return r.json();
+  }
+
+  async createOrder(packageId) {
+    const r = await fetch(`${API_BASE}/api/pay/create`, {
+      method: 'POST', headers: this._headers(),
+      body: JSON.stringify({ package_id: packageId })
+    });
+    return r.json();
+  }
+
+  async checkOrderStatus(orderNo) {
+    const r = await fetch(`${API_BASE}/api/pay/status?order_no=${encodeURIComponent(orderNo)}`, {
+      headers: this._headers()
+    });
+    return r.json();
+  }
+
+  async getOrders() {
+    const r = await fetch(`${API_BASE}/api/pay/orders`, { headers: this._headers() });
+    return r.json();
+  }
 }
 
 // ── Helpers ──
@@ -186,11 +212,14 @@ function initAuthUI(authManager) {
     if (authManager.isLoggedIn) {
       area.innerHTML = `
         <span class="user-beans" title="豆子余额">🫘 ${authManager.beans}</span>
+        <button class="user-recharge-btn" id="rechargeBtn" title="充值豆子">充值</button>
         <span class="user-email">${authManager.user.email.split('@')[0]}</span>
         <button class="btn-text" id="logoutBtn">退出</button>
       `;
       const logoutBtn = $('logoutBtn');
       if (logoutBtn) logoutBtn.onclick = () => { authManager.logout(); updateUserUI(); showToast('已退出登录'); };
+      const rechargeBtn = $('rechargeBtn');
+      if (rechargeBtn) rechargeBtn.onclick = () => showRechargeModal();
     } else {
       area.innerHTML = `<button class="btn btn-sm btn-outline" id="loginTrigger">登录 / 注册</button>`;
       const trigger = $('loginTrigger');
@@ -408,11 +437,145 @@ function initAuthUI(authManager) {
     const closeBeansBtn = $('noBeansClose');
     if (closeBeansBtn) closeBeansBtn.onclick = () => beansModal.classList.add('hidden');
     beansModal.addEventListener('click', e => { if (e.target === beansModal) beansModal.classList.add('hidden'); });
+    const goRechargeBtn = $('goRechargeBtn');
+    if (goRechargeBtn) goRechargeBtn.onclick = () => { beansModal.classList.add('hidden'); showRechargeModal(); };
+  }
+
+  // ── Recharge Modal ──
+  let _packages = null;
+  let _currentOrderNo = null;
+  let _pollTimer = null;
+
+  async function loadPackages() {
+    if (_packages) return _packages;
+    try {
+      const res = await authManager.getPackages();
+      _packages = res.packages || [];
+    } catch (e) { _packages = []; }
+    return _packages;
+  }
+
+  function renderPackages(packages) {
+    const beanGrid = $('rechargeGrid');
+    const memberGrid = $('memberGrid');
+    if (!beanGrid || !memberGrid) return;
+
+    const beanPkgs = packages.filter(p => p.type === 'beans');
+    const memberPkgs = packages.filter(p => p.type === 'member');
+
+    beanGrid.innerHTML = beanPkgs.map(p => `
+      <div class="recharge-card" data-pkg="${p.id}">
+        <div class="rc-beans">🫘 ${p.beans}</div>
+        <div class="rc-price">¥${p.price}</div>
+        <div class="rc-unit">¥${(parseFloat(p.price) / p.beans).toFixed(2)}/豆</div>
+      </div>
+    `).join('');
+
+    memberGrid.innerHTML = memberPkgs.map(p => `
+      <div class="recharge-card ${p.id === 'yearly' ? 'featured' : ''}" data-pkg="${p.id}">
+        <div class="rc-name">${p.name}</div>
+        <div class="rc-beans">🫘 ${p.beans} 豆</div>
+        <div class="rc-price">¥${p.price}</div>
+        <div class="rc-unit">${p.days}天会员</div>
+      </div>
+    `).join('');
+
+    // Bind click events
+    document.querySelectorAll('.recharge-card').forEach(card => {
+      card.addEventListener('click', () => handlePackageClick(card.dataset.pkg));
+    });
+  }
+
+  async function showRechargeModal() {
+    if (!authManager.isLoggedIn) { showAuthModal('请先登录后再充值'); return; }
+    const modal = $('rechargeModal');
+    if (!modal) return;
+    $('payingStatus')?.classList.add('hidden');
+    const pkgs = await loadPackages();
+    renderPackages(pkgs);
+    const beansEl = $('rechargeCurrentBeans');
+    if (beansEl) beansEl.textContent = authManager.beans;
+    modal.classList.remove('hidden');
+  }
+
+  function hideRechargeModal() {
+    $('rechargeModal')?.classList.add('hidden');
+    stopPolling();
+  }
+
+  async function handlePackageClick(packageId) {
+    showToast('正在创建订单…');
+    const res = await authManager.createOrder(packageId);
+    if (res.error) { showToast(res.error, 'error'); return; }
+
+    _currentOrderNo = res.order_no;
+    // Open payment page
+    if (res.pay_url) {
+      window.open(res.pay_url, '_blank');
+    }
+    // Show waiting status
+    $('payingStatus')?.classList.remove('hidden');
+    startPolling();
+  }
+
+  function startPolling() {
+    stopPolling();
+    _pollTimer = setInterval(async () => {
+      if (!_currentOrderNo) return;
+      try {
+        const res = await authManager.checkOrderStatus(_currentOrderNo);
+        if (res.status === 'paid') {
+          stopPolling();
+          await authManager.refreshUser();
+          updateUserUI();
+          $('payingStatus')?.classList.add('hidden');
+          hideRechargeModal();
+          showToast('🎉 充值成功！豆子已到账');
+        }
+      } catch (e) { /* ignore */ }
+    }, 3000);
+  }
+
+  function stopPolling() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  }
+
+  // Recharge modal events
+  const rechargeModal = $('rechargeModal');
+  if (rechargeModal) {
+    const closeBtn = $('rechargeClose');
+    if (closeBtn) closeBtn.onclick = hideRechargeModal;
+    rechargeModal.addEventListener('click', e => { if (e.target === rechargeModal) hideRechargeModal(); });
+
+    const payCheckBtn = $('payCheckBtn');
+    if (payCheckBtn) payCheckBtn.addEventListener('click', async () => {
+      if (!_currentOrderNo) return;
+      payCheckBtn.disabled = true;
+      payCheckBtn.textContent = '查询中…';
+      const res = await authManager.checkOrderStatus(_currentOrderNo);
+      if (res.status === 'paid') {
+        await authManager.refreshUser();
+        updateUserUI();
+        $('payingStatus')?.classList.add('hidden');
+        hideRechargeModal();
+        showToast('🎉 充值成功！豆子已到账');
+      } else {
+        showToast('暂未检测到支付，请稍后再试', 'error');
+      }
+      payCheckBtn.disabled = false;
+      payCheckBtn.textContent = '我已支付';
+    });
+
+    const payCancelBtn = $('payCancelBtn');
+    if (payCancelBtn) payCancelBtn.addEventListener('click', () => {
+      stopPolling();
+      $('payingStatus')?.classList.add('hidden');
+    });
   }
 
   // Initial UI
   updateUserUI();
   if (authManager.isLoggedIn) authManager.refreshUser().then(updateUserUI);
 
-  return { updateUserUI, showAuthModal, hideAuthModal };
+  return { updateUserUI, showAuthModal, hideAuthModal, showRechargeModal };
 }

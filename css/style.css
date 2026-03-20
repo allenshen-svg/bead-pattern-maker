@@ -909,3 +909,40 @@ input[type="range"] { margin-top: 3px; }
   pointer-events: none;
   z-index: 4;
 }
+
+/* ── Recharge Modal ── */
+.recharge-modal-box { max-width: 520px; }
+.recharge-balance { font-size: 16px; color: #666; margin-bottom: 16px; }
+.recharge-balance b { color: #6366f1; font-size: 20px; }
+.recharge-section { margin-bottom: 18px; }
+.recharge-section h3 { font-size: 15px; margin-bottom: 10px; color: #333; display: flex; align-items: center; gap: 8px; }
+.recharge-desc { font-size: 13px; color: #888; margin: -4px 0 10px; }
+.member-badge { font-size: 11px; background: linear-gradient(135deg, #f59e0b, #ef4444); color: #fff; padding: 2px 8px; border-radius: 10px; }
+.recharge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.recharge-card { border: 2px solid #e5e7eb; border-radius: 12px; padding: 14px 8px; text-align: center; cursor: pointer; transition: all .2s; position: relative; }
+.recharge-card:hover { border-color: #6366f1; background: #f5f3ff; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(99,102,241,0.15); }
+.recharge-card.featured { border-color: #f59e0b; }
+.recharge-card.featured::before { content: '推荐'; position: absolute; top: -10px; right: -6px; background: linear-gradient(135deg, #f59e0b, #ef4444); color: #fff; font-size: 10px; padding: 2px 8px; border-radius: 8px; }
+.recharge-card .rc-beans { font-size: 22px; font-weight: 700; color: #6366f1; }
+.recharge-card .rc-price { font-size: 18px; font-weight: 600; color: #ef4444; margin-top: 4px; }
+.recharge-card .rc-price small { font-size: 12px; color: #999; }
+.recharge-card .rc-unit { font-size: 11px; color: #999; margin-top: 2px; }
+.recharge-card .rc-name { font-size: 13px; color: #666; margin-top: 4px; }
+
+.paying-status { text-align: center; padding: 20px 0; }
+.paying-status p { margin: 8px 0; color: #666; }
+.pay-hint { font-size: 13px; color: #999 !important; }
+.pay-spinner { width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #6366f1; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px; }
+.paying-status .btn { margin: 8px 6px 0; }
+
+.nobeans-actions { text-align: center; margin-top: 16px; }
+.nobeans-actions .btn { padding: 10px 32px; font-size: 15px; }
+
+/* User recharge button */
+.user-recharge-btn { background: none; border: 1px solid #6366f1; color: #6366f1; padding: 3px 10px; border-radius: 14px; font-size: 12px; cursor: pointer; transition: all .2s; }
+.user-recharge-btn:hover { background: #6366f1; color: #fff; }
+
+@media (max-width: 600px) {
+  .recharge-grid { grid-template-columns: repeat(2, 1fr); }
+  .recharge-modal-box { max-width: 95vw; padding: 16px; }
+}

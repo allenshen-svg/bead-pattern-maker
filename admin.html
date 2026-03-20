@@ -50,6 +50,7 @@
     .badge-green { background: #dcfce7; color: #166534; }
     .badge-gray { background: #f1f5f9; color: var(--tx2); }
     .badge-red { background: #fef2f2; color: #991b1b; }
+    .badge-yellow { background: #fefce8; color: #854d0e; }
 
     /* Pagination */
     .pagination { padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--bd); font-size: 13px; color: var(--tx2); }
@@ -87,9 +88,13 @@
 <div id="loginOverlay" class="login-overlay">
   <div class="login-box">
     <h2>🔐 管理后台</h2>
-    <input type="text" id="adminKeyInput" placeholder="输入管理员密钥" autocomplete="off" autofocus>
-    <div class="err" id="loginErr"></div>
-    <button class="btn btn-pri" style="width:100%;padding:10px" onclick="doLogin()">进入</button>
+    <p style="color:var(--tx2);font-size:14px;margin-bottom:16px">需要验证身份</p>
+    <div id="keyInputWrap" style="display:none">
+      <input type="text" id="adminKeyInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-form-type="other" data-lpignore="true" style="-webkit-text-security:disc;text-security:disc;width:100%;padding:10px 14px;border:1px solid var(--bd);border-radius:8px;font-size:16px;margin-bottom:8px;outline:none;letter-spacing:2px" placeholder="••••••">
+      <div class="err" id="loginErr"></div>
+      <button class="btn btn-pri" style="width:100%;padding:10px" id="loginSubmitBtn">确定</button>
+    </div>
+    <button class="btn btn-pri" id="showKeyBtn" style="width:100%;padding:10px">输入密钥</button>
   </div>
 </div>
 
@@ -107,12 +112,14 @@
       <div class="stat-card"><div class="label">今日新注册</div><div class="value" id="statNew">-</div></div>
       <div class="stat-card"><div class="label">今日活跃</div><div class="value" id="statActive">-</div></div>
       <div class="stat-card"><div class="label">豆子总消耗</div><div class="value" id="statBeans">-</div></div>
+      <div class="stat-card"><div class="label">总收入(¥)</div><div class="value" id="statRevenue">-</div></div>
     </div>
 
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab-btn active" data-tab="users" onclick="switchTab('users')">用户列表</button>
       <button class="tab-btn" data-tab="logs" onclick="switchTab('logs')">豆子日志</button>
+      <button class="tab-btn" data-tab="orders" onclick="switchTab('orders')">订单管理</button>
     </div>
 
     <!-- Users panel -->
@@ -149,10 +156,31 @@
         </div>
       </div>
     </div>
+
+    <!-- Orders panel -->
+    <div id="ordersPanel" class="panel hidden">
+      <div class="panel-header">
+        <h3>订单列表</h3>
+        <select id="orderStatusFilter" style="padding:6px 12px;border:1px solid var(--bd);border-radius:6px;font-size:13px" onchange="ordersPage=1;loadOrders()">
+          <option value="">全部状态</option>
+          <option value="paid">已支付</option>
+          <option value="pending">待支付</option>
+        </select>
+      </div>
+      <table>
+        <thead><tr><th>订单号</th><th>用户</th><th>套餐</th><th>金额</th><th>豆子</th><th>状态</th><th>创建时间</th><th>支付时间</th></tr></thead>
+        <tbody id="ordersBody"></tbody>
+      </table>
+      <div class="pagination">
+        <span id="ordersInfo">-</span>
+        <div>
+          <button id="ordersPrev" onclick="ordersPage--;loadOrders()" disabled>上一页</button>
+          <button id="ordersNext" onclick="ordersPage++;loadOrders()">下一页</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
-
-<!-- Adjust Beans Modal -->
 <div id="beansModal" class="modal-bg hidden">
   <div class="modal">
     <h3>调整豆子 — <span id="beansModalEmail"></span></h3>
@@ -168,9 +196,9 @@
 </div>
 
 <script>
-const API = 'https://api.pindou.top';
+const API = location.origin;
 let adminKey = sessionStorage.getItem('pindou_admin_key') || '';
-let usersPage = 1, logsPage = 1;
+let usersPage = 1, logsPage = 1, ordersPage = 1;
 let searchTimer = null;
 
 function headers() { return { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey }; }
@@ -180,19 +208,39 @@ function fmtTime(iso) {
   catch { return iso.slice(0, 16).replace('T', ' '); }
 }
 
-// Login
-async function doLogin() {
+async function promptLogin() {
   const key = document.getElementById('adminKeyInput').value.trim();
   if (!key) return;
   adminKey = key;
+  document.getElementById('loginSubmitBtn').disabled = true;
+  document.getElementById('loginSubmitBtn').textContent = '验证中…';
   try {
     const r = await fetch(`${API}/api/admin/stats`, { headers: headers() });
-    if (!r.ok) { document.getElementById('loginErr').textContent = '密钥错误'; adminKey = ''; return; }
-    sessionStorage.setItem('pindou_admin_key', adminKey);
-    enterAdmin();
-  } catch (e) { document.getElementById('loginErr').textContent = '网络错误'; adminKey = ''; }
+    if (r.ok) {
+      sessionStorage.setItem('pindou_admin_key', adminKey);
+      enterAdmin();
+    } else {
+      adminKey = '';
+      document.getElementById('loginErr').textContent = '密钥错误';
+      document.getElementById('adminKeyInput').value = '';
+      document.getElementById('adminKeyInput').focus();
+    }
+  } catch (e) {
+    adminKey = '';
+    document.getElementById('loginErr').textContent = '网络错误';
+  }
+  document.getElementById('loginSubmitBtn').disabled = false;
+  document.getElementById('loginSubmitBtn').textContent = '确定';
 }
-document.getElementById('adminKeyInput').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// Bind login UI
+document.getElementById('showKeyBtn').addEventListener('click', function() {
+  this.style.display = 'none';
+  document.getElementById('keyInputWrap').style.display = 'block';
+  document.getElementById('adminKeyInput').focus();
+});
+document.getElementById('loginSubmitBtn').addEventListener('click', promptLogin);
+document.getElementById('adminKeyInput').addEventListener('keydown', e => { if (e.key === 'Enter') promptLogin(); });
 
 function doLogout() { adminKey = ''; sessionStorage.removeItem('pindou_admin_key'); location.reload(); }
 
@@ -203,10 +251,17 @@ function enterAdmin() {
   loadUsers();
 }
 
-// Auto-login
+// Auto-login from session
 if (adminKey) {
   fetch(`${API}/api/admin/stats`, { headers: headers() })
-    .then(r => { if (r.ok) enterAdmin(); else { adminKey = ''; sessionStorage.removeItem('pindou_admin_key'); } })
+    .then(r => {
+      if (r.ok) {
+        enterAdmin();
+      } else {
+        adminKey = '';
+        sessionStorage.removeItem('pindou_admin_key');
+      }
+    })
     .catch(() => {});
 }
 
@@ -219,6 +274,7 @@ async function loadStats() {
     document.getElementById('statNew').textContent = d.today_new;
     document.getElementById('statActive').textContent = d.today_active;
     document.getElementById('statBeans').textContent = d.total_beans_used;
+    document.getElementById('statRevenue').textContent = '¥' + (d.total_revenue || 0);
   } catch {}
 }
 
@@ -227,7 +283,9 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.getElementById('usersPanel').classList.toggle('hidden', tab !== 'users');
   document.getElementById('logsPanel').classList.toggle('hidden', tab !== 'logs');
+  document.getElementById('ordersPanel').classList.toggle('hidden', tab !== 'orders');
   if (tab === 'logs') loadLogs();
+  if (tab === 'orders') loadOrders();
 }
 
 // Users
@@ -306,6 +364,33 @@ async function submitBeans() {
     if (d.error) alert(d.error);
     else { closeBeansModal(); loadUsers(); loadStats(); }
   } catch { alert('网络错误'); }
+}
+
+// Orders
+async function loadOrders() {
+  const status = document.getElementById('orderStatusFilter').value;
+  const params = new URLSearchParams({ page: ordersPage, per: 50 });
+  if (status) params.set('status', status);
+  try {
+    const r = await fetch(`${API}/api/admin/orders?${params}`, { headers: headers() });
+    const d = await r.json();
+    const tbody = document.getElementById('ordersBody');
+    tbody.innerHTML = d.orders.map(o => `
+      <tr>
+        <td style="font-family:monospace;font-size:11px">${o.order_no}</td>
+        <td>${o.email || o.user_id}</td>
+        <td>${o.package_name}</td>
+        <td><b>¥${o.amount}</b></td>
+        <td>${o.beans}</td>
+        <td>${o.status === 'paid' ? '<span class="badge badge-green">已支付</span>' : '<span class="badge badge-yellow">待支付</span>'}</td>
+        <td>${fmtTime(o.created_at)}</td>
+        <td>${fmtTime(o.pay_time)}</td>
+      </tr>
+    `).join('');
+    document.getElementById('ordersInfo').textContent = `共 ${d.total} 条，第 ${d.page} 页`;
+    document.getElementById('ordersPrev').disabled = d.page <= 1;
+    document.getElementById('ordersNext').disabled = d.orders.length < 50;
+  } catch {}
 }
 </script>
 </body>
