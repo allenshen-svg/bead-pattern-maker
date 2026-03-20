@@ -216,11 +216,6 @@ class BeadPatternApp {
     // ── Comparison toggle ──
     $('compareBtn').addEventListener('click', () => this._toggleCompare());
 
-    // ── Upgrade modal ──
-    $('modalClose').addEventListener('click', () => $('upgradeModal').classList.add('hidden'));
-    $('upgradeModal').addEventListener('click', e => { if (e.target === $('upgradeModal')) $('upgradeModal').classList.add('hidden'); });
-    $('upgradeBtn').addEventListener('click', () => { trackEvent('upgrade_click'); alert('升级功能即将上线，敬请期待！'); });
-
     // ── Toggles ──
     $('showCodes').addEventListener('change', e => { this.showCodes = e.target.checked; this._draw(); });
     $('showGrid').addEventListener('change',  e => { this.showGrid  = e.target.checked; this._draw(); });
