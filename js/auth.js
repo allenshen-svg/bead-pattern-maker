@@ -467,22 +467,30 @@ function initAuthUI(authManager) {
     const beanPkgs = packages.filter(p => p.type === 'beans');
     const memberPkgs = packages.filter(p => p.type === 'member');
 
-    beanGrid.innerHTML = beanPkgs.map(p => `
+    beanGrid.innerHTML = beanPkgs.map(p => {
+      const unit = (parseFloat(p.price) / p.beans).toFixed(2);
+      const saveTag = p.beans >= 100 ? '<span class="rc-save">省 38%</span>' : p.beans >= 30 ? '<span class="rc-save">省 11%</span>' : '';
+      return `
       <div class="recharge-card" data-pkg="${p.id}">
+        ${saveTag}
         <div class="rc-beans">🫘 ${p.beans}</div>
         <div class="rc-price">¥${p.price}</div>
-        <div class="rc-unit">¥${(parseFloat(p.price) / p.beans).toFixed(2)}/豆</div>
-      </div>
-    `).join('');
+        <div class="rc-unit">¥${unit}/豆</div>
+        <div class="rc-benefit">可生成 ${p.beans} 个图案</div>
+      </div>`;
+    }).join('');
 
-    memberGrid.innerHTML = memberPkgs.map(p => `
+    memberGrid.innerHTML = memberPkgs.map(p => {
+      const daily = (parseFloat(p.price) / p.days).toFixed(2);
+      return `
       <div class="recharge-card ${p.id === 'yearly' ? 'featured' : ''}" data-pkg="${p.id}">
         <div class="rc-name">${p.name}</div>
         <div class="rc-beans">🫘 ${p.beans} 豆</div>
         <div class="rc-price">¥${p.price}</div>
-        <div class="rc-unit">${p.days}天会员</div>
-      </div>
-    `).join('');
+        <div class="rc-unit">${p.days}天 · ¥${daily}/天</div>
+        <div class="rc-benefit">豆子 + 全部会员权益</div>
+      </div>`;
+    }).join('');
 
     document.querySelectorAll('.recharge-card').forEach(card => {
       card.addEventListener('click', () => handlePackageClick(card.dataset.pkg));
@@ -534,6 +542,22 @@ function initAuthUI(authManager) {
     const amtHint = $('payAmountHint'); if (amtHint) amtHint.textContent = '¥' + res.amount;
     const noEl = $('payOrderNo'); if (noEl) noEl.textContent = res.order_no;
     const noNote = $('payOrderNoNote'); if (noNote) noNote.textContent = res.order_no;
+
+    // Show benefits summary
+    const summaryEl = $('payBenefitsSummary');
+    if (summaryEl) {
+      const pkg = (_packagesData || []).find(p => p.id === packageId);
+      if (pkg) {
+        const items = [`🫘 获得 <b>${pkg.beans}</b> 豆子（可生成 ${pkg.beans} 个图案）`];
+        if (pkg.type === 'member') {
+          items.push(`👑 解锁 <b>${pkg.days} 天</b>会员权益`);
+          items.push('🖼️ 高清导出 / 🎨 更多模板 / ⚡ 优先处理');
+        }
+        summaryEl.innerHTML = '<div class="pbs-title">充值后您将获得:</div>' + items.map(i => `<div class="pbs-item">${i}</div>`).join('');
+      } else {
+        summaryEl.innerHTML = '';
+      }
+    }
 
     _currentPayMethod = 'wechat';
     document.querySelectorAll('.pay-qr-tab').forEach(t => t.classList.toggle('active', t.dataset.method === 'wechat'));

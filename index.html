@@ -248,20 +248,34 @@
     <div id="rechargeStep1">
       <h2>🫘 豆子充值</h2>
       <p class="recharge-balance">当前余额: <b id="rechargeCurrentBeans">0</b> 豆子</p>
+      <div class="recharge-tip">
+        <span>💡</span> 每次生成图案消耗 <b>1 豆</b>，豆子永久有效
+      </div>
       <div class="recharge-section">
         <h3>豆子充值包</h3>
         <div class="recharge-grid" id="rechargeGrid"></div>
       </div>
       <div class="recharge-section">
         <h3>会员套餐 <span class="member-badge">更划算</span></h3>
-        <p class="recharge-desc">会员一次性获得大量豆子，同时解锁高清导出、更多模板</p>
+        <p class="recharge-desc">一次性获得大量豆子 + 解锁全部会员特权</p>
         <div class="recharge-grid" id="memberGrid"></div>
+      </div>
+      <div class="member-benefits">
+        <h4>👑 会员专属权益</h4>
+        <ul class="benefits-list">
+          <li><span class="benefit-icon">🫘</span>海量豆子 — 月卡 150 豆 / 年卡 1800 豆一次到账</li>
+          <li><span class="benefit-icon">🖼️</span>高清导出 — 支持更高分辨率 PNG / PDF 导出</li>
+          <li><span class="benefit-icon">🎨</span>更多模板 — 解锁全部拼豆模板与色板</li>
+          <li><span class="benefit-icon">⚡</span>优先处理 — 图案生成优先队列，速度更快</li>
+          <li><span class="benefit-icon">💬</span>专属客服 — 问题优先响应</li>
+        </ul>
       </div>
     </div>
     <!-- Step 2: Show QR code -->
     <div id="rechargeStep2" class="hidden">
       <h2>📱 扫码支付</h2>
       <p class="pay-order-info">套餐: <b id="payPkgName">-</b> ｜ 金额: <b id="payAmount">-</b></p>
+      <div class="pay-benefits-summary" id="payBenefitsSummary"></div>
       <p class="pay-order-no">订单号: <code id="payOrderNo">-</code></p>
       <div class="pay-qr-tabs">
         <button class="pay-qr-tab active" data-method="wechat" id="qrTabWechat">💚 微信</button>

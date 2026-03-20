@@ -928,6 +928,25 @@ input[type="range"] { margin-top: 3px; }
 .recharge-card .rc-price small { font-size: 12px; color: #999; }
 .recharge-card .rc-unit { font-size: 11px; color: #999; margin-top: 2px; }
 .recharge-card .rc-name { font-size: 13px; color: #666; margin-top: 4px; }
+.recharge-card .rc-benefit { font-size: 11px; color: #6366f1; margin-top: 6px; background: #f5f3ff; padding: 3px 6px; border-radius: 6px; }
+.recharge-card .rc-save { position: absolute; top: -8px; left: -6px; background: #ef4444; color: #fff; font-size: 10px; padding: 2px 7px; border-radius: 8px; font-weight: 600; }
+
+/* Recharge tip */
+.recharge-tip { display: flex; align-items: center; gap: 6px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; font-size: 13px; color: #92400e; }
+.recharge-tip b { color: #d97706; }
+
+/* Member benefits */
+.member-benefits { background: linear-gradient(135deg, #fdf4ff, #f5f3ff); border: 1px solid #e9d5ff; border-radius: 12px; padding: 14px 16px; margin-top: 8px; }
+.member-benefits h4 { font-size: 14px; color: #7c3aed; margin: 0 0 10px; }
+.benefits-list { list-style: none; padding: 0; margin: 0; }
+.benefits-list li { font-size: 13px; color: #555; padding: 4px 0; display: flex; align-items: center; gap: 8px; }
+.benefit-icon { font-size: 15px; flex-shrink: 0; }
+
+/* Pay benefits summary (step 2) */
+.pay-benefits-summary { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 14px; margin: 8px 0 12px; }
+.pbs-title { font-size: 13px; font-weight: 600; color: #166534; margin-bottom: 6px; }
+.pbs-item { font-size: 13px; color: #15803d; padding: 2px 0; }
+.pbs-item b { color: #166534; }
 
 .paying-status { text-align: center; padding: 20px 0; }
 .paying-status p { margin: 8px 0; color: #666; }
