@@ -163,12 +163,13 @@
         <h3>订单列表</h3>
         <select id="orderStatusFilter" style="padding:6px 12px;border:1px solid var(--bd);border-radius:6px;font-size:13px" onchange="ordersPage=1;loadOrders()">
           <option value="">全部状态</option>
+          <option value="pending">待确认</option>
           <option value="paid">已支付</option>
-          <option value="pending">待支付</option>
+          <option value="cancelled">已取消</option>
         </select>
       </div>
       <table>
-        <thead><tr><th>订单号</th><th>用户</th><th>套餐</th><th>金额</th><th>豆子</th><th>状态</th><th>创建时间</th><th>支付时间</th></tr></thead>
+        <thead><tr><th>订单号</th><th>用户</th><th>套餐</th><th>金额</th><th>豆子</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
         <tbody id="ordersBody"></tbody>
       </table>
       <div class="pagination">
@@ -375,22 +376,50 @@ async function loadOrders() {
     const r = await fetch(`${API}/api/admin/orders?${params}`, { headers: headers() });
     const d = await r.json();
     const tbody = document.getElementById('ordersBody');
-    tbody.innerHTML = d.orders.map(o => `
-      <tr>
+    tbody.innerHTML = d.orders.map(o => {
+      const statusBadge = o.status === 'paid'
+        ? '<span class="badge badge-green">已支付</span>'
+        : o.status === 'cancelled'
+          ? '<span class="badge badge-red">已取消</span>'
+          : '<span class="badge badge-yellow">待确认</span>';
+      const actions = o.status === 'pending'
+        ? `<button class="btn btn-sm btn-pri" onclick="confirmOrder(${o.id},'${o.order_no}')">✅ 确认</button> <button class="btn btn-sm" style="background:var(--bd)" onclick="cancelOrder(${o.id})">取消</button>`
+        : '-';
+      return `<tr>
         <td style="font-family:monospace;font-size:11px">${o.order_no}</td>
         <td>${o.email || o.user_id}</td>
         <td>${o.package_name}</td>
         <td><b>¥${o.amount}</b></td>
         <td>${o.beans}</td>
-        <td>${o.status === 'paid' ? '<span class="badge badge-green">已支付</span>' : '<span class="badge badge-yellow">待支付</span>'}</td>
+        <td>${statusBadge}</td>
         <td>${fmtTime(o.created_at)}</td>
-        <td>${fmtTime(o.pay_time)}</td>
-      </tr>
-    `).join('');
+        <td>${actions}</td>
+      </tr>`;
+    }).join('');
     document.getElementById('ordersInfo').textContent = `共 ${d.total} 条，第 ${d.page} 页`;
     document.getElementById('ordersPrev').disabled = d.page <= 1;
     document.getElementById('ordersNext').disabled = d.orders.length < 50;
   } catch {}
+}
+
+async function confirmOrder(orderId, orderNo) {
+  if (!confirm(`确认订单 ${orderNo} 已收款？豆子将自动发放。`)) return;
+  try {
+    const r = await fetch(`${API}/api/admin/order/${orderId}/confirm`, { method: 'POST', headers: headers() });
+    const d = await r.json();
+    if (d.error) alert(d.error);
+    else { alert('✅ 已确认到账'); loadOrders(); loadStats(); }
+  } catch { alert('网络错误'); }
+}
+
+async function cancelOrder(orderId) {
+  if (!confirm('确定取消此订单？')) return;
+  try {
+    const r = await fetch(`${API}/api/admin/order/${orderId}/cancel`, { method: 'POST', headers: headers() });
+    const d = await r.json();
+    if (d.error) alert(d.error);
+    else loadOrders();
+  } catch { alert('网络错误'); }
 }
 </script>
 </body>

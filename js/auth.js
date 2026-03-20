@@ -442,17 +442,21 @@ function initAuthUI(authManager) {
   }
 
   // ── Recharge Modal ──
-  let _packages = null;
+  let _packagesData = null;
   let _currentOrderNo = null;
-  let _pollTimer = null;
+  let _qrcodeWechat = '';
+  let _qrcodeAlipay = '';
+  let _currentPayMethod = 'wechat';
 
   async function loadPackages() {
-    if (_packages) return _packages;
+    if (_packagesData) return _packagesData;
     try {
       const res = await authManager.getPackages();
-      _packages = res.packages || [];
-    } catch (e) { _packages = []; }
-    return _packages;
+      _packagesData = res.packages || [];
+      _qrcodeWechat = res.qrcode_wechat || '';
+      _qrcodeAlipay = res.qrcode_alipay || '';
+    } catch (e) { _packagesData = []; }
+    return _packagesData;
   }
 
   function renderPackages(packages) {
@@ -480,27 +484,39 @@ function initAuthUI(authManager) {
       </div>
     `).join('');
 
-    // Bind click events
     document.querySelectorAll('.recharge-card').forEach(card => {
       card.addEventListener('click', () => handlePackageClick(card.dataset.pkg));
     });
+  }
+
+  function showStep(step) {
+    $('rechargeStep1')?.classList.toggle('hidden', step !== 1);
+    $('rechargeStep2')?.classList.toggle('hidden', step !== 2);
+    $('rechargeStep3')?.classList.toggle('hidden', step !== 3);
   }
 
   async function showRechargeModal() {
     if (!authManager.isLoggedIn) { showAuthModal('请先登录后再充值'); return; }
     const modal = $('rechargeModal');
     if (!modal) return;
-    $('payingStatus')?.classList.add('hidden');
     const pkgs = await loadPackages();
     renderPackages(pkgs);
     const beansEl = $('rechargeCurrentBeans');
     if (beansEl) beansEl.textContent = authManager.beans;
+    showStep(1);
     modal.classList.remove('hidden');
   }
 
   function hideRechargeModal() {
     $('rechargeModal')?.classList.add('hidden');
-    stopPolling();
+  }
+
+  function updateQrImage() {
+    const img = $('payQrImage');
+    if (!img) return;
+    const src = _currentPayMethod === 'wechat' ? _qrcodeWechat : _qrcodeAlipay;
+    img.src = src || '';
+    if (!src) img.alt = '收款码未配置，请联系管理员';
   }
 
   async function handlePackageClick(packageId) {
@@ -509,35 +525,20 @@ function initAuthUI(authManager) {
     if (res.error) { showToast(res.error, 'error'); return; }
 
     _currentOrderNo = res.order_no;
-    // Open payment page
-    if (res.pay_url) {
-      window.open(res.pay_url, '_blank');
-    }
-    // Show waiting status
-    $('payingStatus')?.classList.remove('hidden');
-    startPolling();
-  }
+    if (res.qrcode_wechat) _qrcodeWechat = res.qrcode_wechat;
+    if (res.qrcode_alipay) _qrcodeAlipay = res.qrcode_alipay;
 
-  function startPolling() {
-    stopPolling();
-    _pollTimer = setInterval(async () => {
-      if (!_currentOrderNo) return;
-      try {
-        const res = await authManager.checkOrderStatus(_currentOrderNo);
-        if (res.status === 'paid') {
-          stopPolling();
-          await authManager.refreshUser();
-          updateUserUI();
-          $('payingStatus')?.classList.add('hidden');
-          hideRechargeModal();
-          showToast('🎉 充值成功！豆子已到账');
-        }
-      } catch (e) { /* ignore */ }
-    }, 3000);
-  }
+    // Fill step 2
+    const nameEl = $('payPkgName'); if (nameEl) nameEl.textContent = res.package_name;
+    const amtEl = $('payAmount'); if (amtEl) amtEl.textContent = '¥' + res.amount;
+    const amtHint = $('payAmountHint'); if (amtHint) amtHint.textContent = '¥' + res.amount;
+    const noEl = $('payOrderNo'); if (noEl) noEl.textContent = res.order_no;
+    const noNote = $('payOrderNoNote'); if (noNote) noNote.textContent = res.order_no;
 
-  function stopPolling() {
-    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+    _currentPayMethod = 'wechat';
+    document.querySelectorAll('.pay-qr-tab').forEach(t => t.classList.toggle('active', t.dataset.method === 'wechat'));
+    updateQrImage();
+    showStep(2);
   }
 
   // Recharge modal events
@@ -547,30 +548,30 @@ function initAuthUI(authManager) {
     if (closeBtn) closeBtn.onclick = hideRechargeModal;
     rechargeModal.addEventListener('click', e => { if (e.target === rechargeModal) hideRechargeModal(); });
 
-    const payCheckBtn = $('payCheckBtn');
-    if (payCheckBtn) payCheckBtn.addEventListener('click', async () => {
-      if (!_currentOrderNo) return;
-      payCheckBtn.disabled = true;
-      payCheckBtn.textContent = '查询中…';
-      const res = await authManager.checkOrderStatus(_currentOrderNo);
-      if (res.status === 'paid') {
-        await authManager.refreshUser();
-        updateUserUI();
-        $('payingStatus')?.classList.add('hidden');
-        hideRechargeModal();
-        showToast('🎉 充值成功！豆子已到账');
-      } else {
-        showToast('暂未检测到支付，请稍后再试', 'error');
-      }
-      payCheckBtn.disabled = false;
-      payCheckBtn.textContent = '我已支付';
+    // QR tab switching
+    document.querySelectorAll('.pay-qr-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        _currentPayMethod = tab.dataset.method;
+        document.querySelectorAll('.pay-qr-tab').forEach(t => t.classList.toggle('active', t === tab));
+        updateQrImage();
+      });
     });
 
-    const payCancelBtn = $('payCancelBtn');
-    if (payCancelBtn) payCancelBtn.addEventListener('click', () => {
-      stopPolling();
-      $('payingStatus')?.classList.add('hidden');
+    // "我已转账" button
+    const payDoneBtn = $('payDoneBtn');
+    if (payDoneBtn) payDoneBtn.addEventListener('click', () => {
+      const waitNo = $('payWaitOrderNo');
+      if (waitNo) waitNo.textContent = _currentOrderNo || '-';
+      showStep(3);
     });
+
+    // Back button
+    const payBackBtn = $('payBackBtn');
+    if (payBackBtn) payBackBtn.addEventListener('click', () => showStep(1));
+
+    // Wait close button
+    const payWaitCloseBtn = $('payWaitCloseBtn');
+    if (payWaitCloseBtn) payWaitCloseBtn.addEventListener('click', hideRechargeModal);
   }
 
   // Initial UI

@@ -935,6 +935,26 @@ input[type="range"] { margin-top: 3px; }
 .pay-spinner { width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #6366f1; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px; }
 .paying-status .btn { margin: 8px 6px 0; }
 
+/* Payment QR flow */
+.pay-order-info { font-size: 15px; color: #333; margin: 8px 0; }
+.pay-order-no { font-size: 13px; color: #888; margin-bottom: 12px; }
+.pay-order-no code, .pay-qr-note code { background: #f3f4f6; padding: 2px 8px; border-radius: 4px; font-size: 13px; font-weight: 600; color: #6366f1; user-select: all; }
+.pay-qr-tabs { display: flex; gap: 0; margin-bottom: 12px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+.pay-qr-tab { flex: 1; padding: 8px; border: none; background: #fff; cursor: pointer; font-size: 14px; font-weight: 600; color: #666; transition: .2s; }
+.pay-qr-tab.active { background: #6366f1; color: #fff; }
+.pay-qr-tab:first-child.active { background: #07c160; }
+.pay-qr-wrap { text-align: center; padding: 16px 0; }
+.pay-qr-img { width: 220px; height: 220px; border: 2px solid #e5e7eb; border-radius: 12px; object-fit: contain; background: #fafafa; }
+.pay-qr-hint { font-size: 18px; font-weight: 600; color: #333; margin: 10px 0 4px; }
+.pay-qr-note { font-size: 13px; color: #ef4444; margin: 8px 0; }
+.pay-actions { display: flex; gap: 10px; margin-top: 12px; }
+.pay-actions .btn { flex: 1; padding: 10px; font-size: 15px; }
+.pay-done-info { text-align: center; padding: 20px 0; }
+.pay-done-info h2 { margin-bottom: 12px; }
+.pay-done-info p { margin: 8px 0; color: #555; }
+.pay-done-hint { font-size: 13px; color: #999 !important; margin-top: 12px !important; }
+.pay-done-info .btn { margin-top: 16px; }
+
 .nobeans-actions { text-align: center; margin-top: 16px; }
 .nobeans-actions .btn { padding: 10px 32px; font-size: 15px; }
 
