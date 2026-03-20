@@ -272,6 +272,9 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js" integrity="sha512-qZvrmS2ekKPF2mSznTQsxqPgnpkI4DNTlrdUmIzVYC/qiocDeJAlEMhmKSyKKMOOSFliMz4JhQb2VnKsVjgTg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
+<!-- Toast -->
+<div id="toast" class="toast hidden"></div>
+
 <!-- Auth Modal -->
 <div id="authModal" class="modal-overlay hidden">
   <div class="modal-box auth-modal-box">
@@ -282,27 +285,54 @@
       <button class="auth-tab active" data-tab="register">注册</button>
       <button class="auth-tab" data-tab="login">登录</button>
     </div>
-    <form id="registerForm" class="auth-form">
+    <form id="registerForm" class="auth-form" novalidate>
       <div class="form-group">
-        <input type="email" id="regEmail" placeholder="邮箱地址" required>
+        <label for="regEmail">邮箱地址</label>
+        <input type="email" id="regEmail" placeholder="example@email.com" autocomplete="email" required>
+        <span class="field-error" id="regEmailError"></span>
       </div>
       <div class="form-group code-group">
-        <input type="text" id="regCode" placeholder="验证码" maxlength="6" required>
-        <button type="button" id="sendCodeBtn" class="send-code-btn">发送验证码</button>
+        <div class="code-input-wrap">
+          <label for="regCode">验证码</label>
+          <input type="text" id="regCode" placeholder="6位数字验证码" maxlength="6" inputmode="numeric" autocomplete="one-time-code" required>
+        </div>
+        <button type="button" id="sendCodeBtn" class="send-code-btn" tabindex="-1">发送验证码</button>
       </div>
-      <div class="form-group">
-        <input type="password" id="regPassword" placeholder="设置密码（至少6位）" minlength="6" required>
+      <span class="field-error" id="regCodeError"></span>
+      <div class="form-group pw-group">
+        <label for="regPassword">密码</label>
+        <div class="pw-input-wrap">
+          <input type="password" id="regPassword" placeholder="至少6位" minlength="6" autocomplete="new-password" required>
+          <button type="button" class="pw-toggle" data-target="regPassword" aria-label="显示密码">👁</button>
+        </div>
+        <span class="field-error" id="regPasswordError"></span>
       </div>
-      <button type="submit" class="btn btn-primary btn-full">注册</button>
+      <div class="form-group pw-group">
+        <label for="regPasswordConfirm">确认密码</label>
+        <div class="pw-input-wrap">
+          <input type="password" id="regPasswordConfirm" placeholder="再次输入密码" autocomplete="new-password" required>
+          <button type="button" class="pw-toggle" data-target="regPasswordConfirm" aria-label="显示密码">👁</button>
+        </div>
+        <span class="field-error" id="regPasswordConfirmError"></span>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full"><span class="btn-text-label">注册</span><span class="btn-spinner hidden"></span></button>
     </form>
-    <form id="loginForm" class="auth-form hidden">
+    <form id="loginForm" class="auth-form hidden" novalidate>
       <div class="form-group">
-        <input type="email" id="loginEmail" placeholder="邮箱地址" required>
+        <label for="loginEmail">邮箱地址</label>
+        <input type="email" id="loginEmail" placeholder="example@email.com" autocomplete="email" required>
+        <span class="field-error" id="loginEmailError"></span>
       </div>
-      <div class="form-group">
-        <input type="password" id="loginPassword" placeholder="密码" required>
+      <div class="form-group pw-group">
+        <label for="loginPassword">密码</label>
+        <div class="pw-input-wrap">
+          <input type="password" id="loginPassword" placeholder="输入密码" autocomplete="current-password" required>
+          <button type="button" class="pw-toggle" data-target="loginPassword" aria-label="显示密码">👁</button>
+        </div>
+        <span class="field-error" id="loginPasswordError"></span>
       </div>
-      <button type="submit" class="btn btn-primary btn-full">登录</button>
+      <button type="submit" class="btn btn-primary btn-full"><span class="btn-text-label">登录</span><span class="btn-spinner hidden"></span></button>
+      <p class="forgot-link"><a href="#" id="forgotPasswordLink">忘记密码？</a></p>
     </form>
   </div>
 </div>

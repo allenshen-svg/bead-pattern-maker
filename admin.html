@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>拼豆管理后台</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --pri: #6366f1; --bg: #f1f5f9; --sf: #fff; --tx: #1e293b; --tx2: #64748b; --bd: #e2e8f0; --green: #22c55e; --red: #ef4444; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--tx); min-height: 100vh; }
+
+    /* Login overlay */
+    .login-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .login-box { background: var(--sf); padding: 32px; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,.08); max-width: 360px; width: 90%; text-align: center; }
+    .login-box h2 { margin-bottom: 20px; font-size: 20px; }
+    .login-box input { width: 100%; padding: 10px 14px; border: 1px solid var(--bd); border-radius: 8px; font-size: 14px; margin-bottom: 12px; outline: none; }
+    .login-box input:focus { border-color: var(--pri); }
+    .login-box .err { color: var(--red); font-size: 13px; margin-bottom: 8px; min-height: 20px; }
+
+    /* Layout */
+    .header { background: var(--sf); border-bottom: 1px solid var(--bd); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { font-size: 18px; }
+    .header .logout { background: none; border: none; color: var(--tx2); cursor: pointer; font-size: 13px; }
+    .header .logout:hover { color: var(--red); }
+    .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+    /* Stats */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .stat-card { background: var(--sf); border-radius: 10px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
+    .stat-card .label { font-size: 12px; color: var(--tx2); margin-bottom: 4px; }
+    .stat-card .value { font-size: 28px; font-weight: 700; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 0; margin-bottom: 16px; border: 1px solid var(--bd); border-radius: 8px; overflow: hidden; max-width: 300px; }
+    .tab-btn { flex: 1; padding: 8px 16px; border: none; background: var(--sf); cursor: pointer; font-size: 13px; font-weight: 600; color: var(--tx2); transition: .2s; }
+    .tab-btn.active { background: var(--pri); color: #fff; }
+
+    /* Table */
+    .panel { background: var(--sf); border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.04); overflow: hidden; }
+    .panel-header { padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--bd); }
+    .panel-header h3 { font-size: 15px; }
+    .search-input { padding: 6px 12px; border: 1px solid var(--bd); border-radius: 6px; font-size: 13px; width: 220px; outline: none; }
+    .search-input:focus { border-color: var(--pri); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #f8fafc; text-align: left; padding: 10px 14px; font-weight: 600; color: var(--tx2); font-size: 12px; text-transform: uppercase; white-space: nowrap; }
+    td { padding: 10px 14px; border-top: 1px solid var(--bd); white-space: nowrap; }
+    tr:hover td { background: #fafbfd; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .badge-green { background: #dcfce7; color: #166534; }
+    .badge-gray { background: #f1f5f9; color: var(--tx2); }
+    .badge-red { background: #fef2f2; color: #991b1b; }
+
+    /* Pagination */
+    .pagination { padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--bd); font-size: 13px; color: var(--tx2); }
+    .pagination button { padding: 4px 12px; border: 1px solid var(--bd); border-radius: 6px; background: var(--sf); cursor: pointer; font-size: 12px; }
+    .pagination button:disabled { opacity: .4; cursor: not-allowed; }
+    .pagination button:not(:disabled):hover { background: var(--pri); color: #fff; border-color: var(--pri); }
+
+    /* Btn */
+    .btn { padding: 6px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: .2s; }
+    .btn-pri { background: var(--pri); color: #fff; }
+    .btn-pri:hover { background: #4f46e5; }
+    .btn-sm { padding: 3px 8px; font-size: 11px; }
+
+    /* Modal */
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 50; }
+    .modal-bg.hidden { display: none; }
+    .modal { background: var(--sf); border-radius: 12px; padding: 24px; max-width: 360px; width: 90%; }
+    .modal h3 { margin-bottom: 14px; font-size: 16px; }
+    .modal label { display: block; font-size: 12px; color: var(--tx2); margin-bottom: 4px; font-weight: 600; }
+    .modal input, .modal select { width: 100%; padding: 8px 12px; border: 1px solid var(--bd); border-radius: 6px; font-size: 13px; margin-bottom: 10px; outline: none; }
+    .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+
+    .hidden { display: none !important; }
+    @media (max-width: 700px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .search-input { width: 140px; }
+      td, th { padding: 8px 10px; font-size: 12px; }
+      .panel { overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginOverlay" class="login-overlay">
+  <div class="login-box">
+    <h2>🔐 管理后台</h2>
+    <input type="password" id="adminKeyInput" placeholder="输入管理员密钥" autofocus>
+    <div class="err" id="loginErr"></div>
+    <button class="btn btn-pri" style="width:100%;padding:10px" onclick="doLogin()">进入</button>
+  </div>
+</div>
+
+<!-- Main UI -->
+<div id="mainUI" class="hidden">
+  <div class="header">
+    <h1>🎨 拼豆管理后台</h1>
+    <button class="logout" onclick="doLogout()">退出</button>
+  </div>
+
+  <div class="container">
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat-card"><div class="label">总用户数</div><div class="value" id="statTotal">-</div></div>
+      <div class="stat-card"><div class="label">今日新注册</div><div class="value" id="statNew">-</div></div>
+      <div class="stat-card"><div class="label">今日活跃</div><div class="value" id="statActive">-</div></div>
+      <div class="stat-card"><div class="label">豆子总消耗</div><div class="value" id="statBeans">-</div></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="users" onclick="switchTab('users')">用户列表</button>
+      <button class="tab-btn" data-tab="logs" onclick="switchTab('logs')">豆子日志</button>
+    </div>
+
+    <!-- Users panel -->
+    <div id="usersPanel" class="panel">
+      <div class="panel-header">
+        <h3>用户列表</h3>
+        <input class="search-input" id="userSearch" placeholder="搜索邮箱…" oninput="searchUsers()">
+      </div>
+      <table>
+        <thead><tr><th>ID</th><th>邮箱</th><th>豆子</th><th>会员</th><th>注册时间</th><th>最后登录</th><th>操作</th></tr></thead>
+        <tbody id="usersBody"></tbody>
+      </table>
+      <div class="pagination">
+        <span id="usersInfo">-</span>
+        <div>
+          <button id="usersPrev" onclick="usersPage--; loadUsers()" disabled>上一页</button>
+          <button id="usersNext" onclick="usersPage++; loadUsers()">下一页</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Logs panel -->
+    <div id="logsPanel" class="panel hidden">
+      <div class="panel-header"><h3>豆子消耗日志</h3></div>
+      <table>
+        <thead><tr><th>ID</th><th>用户</th><th>变动</th><th>原因</th><th>时间</th></tr></thead>
+        <tbody id="logsBody"></tbody>
+      </table>
+      <div class="pagination">
+        <span id="logsInfo">-</span>
+        <div>
+          <button id="logsPrev" onclick="logsPage--; loadLogs()" disabled>上一页</button>
+          <button id="logsNext" onclick="logsPage++; loadLogs()">下一页</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Adjust Beans Modal -->
+<div id="beansModal" class="modal-bg hidden">
+  <div class="modal">
+    <h3>调整豆子 — <span id="beansModalEmail"></span></h3>
+    <label>调整数量</label>
+    <input type="number" id="beansDelta" placeholder="正数增加，负数扣减">
+    <label>原因</label>
+    <input type="text" id="beansReason" value="管理员调整" placeholder="调整原因">
+    <div class="actions">
+      <button class="btn" style="background:var(--bd)" onclick="closeBeansModal()">取消</button>
+      <button class="btn btn-pri" onclick="submitBeans()">确定</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'https://api.pindou.top';
+let adminKey = sessionStorage.getItem('pindou_admin_key') || '';
+let usersPage = 1, logsPage = 1;
+let searchTimer = null;
+
+function headers() { return { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey }; }
+function fmtTime(iso) {
+  if (!iso) return '-';
+  try { const d = new Date(iso); return d.toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }); }
+  catch { return iso.slice(0, 16).replace('T', ' '); }
+}
+
+// Login
+async function doLogin() {
+  const key = document.getElementById('adminKeyInput').value.trim();
+  if (!key) return;
+  adminKey = key;
+  try {
+    const r = await fetch(`${API}/api/admin/stats`, { headers: headers() });
+    if (!r.ok) { document.getElementById('loginErr').textContent = '密钥错误'; adminKey = ''; return; }
+    sessionStorage.setItem('pindou_admin_key', adminKey);
+    enterAdmin();
+  } catch (e) { document.getElementById('loginErr').textContent = '网络错误'; adminKey = ''; }
+}
+document.getElementById('adminKeyInput').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+function doLogout() { adminKey = ''; sessionStorage.removeItem('pindou_admin_key'); location.reload(); }
+
+function enterAdmin() {
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.getElementById('mainUI').classList.remove('hidden');
+  loadStats();
+  loadUsers();
+}
+
+// Auto-login
+if (adminKey) {
+  fetch(`${API}/api/admin/stats`, { headers: headers() })
+    .then(r => { if (r.ok) enterAdmin(); else { adminKey = ''; sessionStorage.removeItem('pindou_admin_key'); } })
+    .catch(() => {});
+}
+
+// Stats
+async function loadStats() {
+  try {
+    const r = await fetch(`${API}/api/admin/stats`, { headers: headers() });
+    const d = await r.json();
+    document.getElementById('statTotal').textContent = d.total_users;
+    document.getElementById('statNew').textContent = d.today_new;
+    document.getElementById('statActive').textContent = d.today_active;
+    document.getElementById('statBeans').textContent = d.total_beans_used;
+  } catch {}
+}
+
+// Tab switch
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('usersPanel').classList.toggle('hidden', tab !== 'users');
+  document.getElementById('logsPanel').classList.toggle('hidden', tab !== 'logs');
+  if (tab === 'logs') loadLogs();
+}
+
+// Users
+async function loadUsers() {
+  const q = document.getElementById('userSearch').value.trim();
+  const params = new URLSearchParams({ page: usersPage, per: 50 });
+  if (q) params.set('q', q);
+  try {
+    const r = await fetch(`${API}/api/admin/users?${params}`, { headers: headers() });
+    const d = await r.json();
+    const tbody = document.getElementById('usersBody');
+    tbody.innerHTML = d.users.map(u => `
+      <tr>
+        <td>${u.id}</td>
+        <td>${u.email}</td>
+        <td><b>${u.beans}</b></td>
+        <td>${u.is_member ? '<span class="badge badge-green">会员</span>' : '<span class="badge badge-gray">普通</span>'}</td>
+        <td>${fmtTime(u.created_at)}</td>
+        <td>${fmtTime(u.last_login)}</td>
+        <td><button class="btn btn-sm btn-pri" onclick="openBeansModal(${u.id},'${u.email.replace(/'/g,"\\'")}')">调豆子</button></td>
+      </tr>
+    `).join('');
+    document.getElementById('usersInfo').textContent = `共 ${d.total} 条，第 ${d.page} 页`;
+    document.getElementById('usersPrev').disabled = d.page <= 1;
+    document.getElementById('usersNext').disabled = d.users.length < 50;
+  } catch {}
+}
+
+function searchUsers() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { usersPage = 1; loadUsers(); }, 400);
+}
+
+// Bean logs
+async function loadLogs() {
+  try {
+    const r = await fetch(`${API}/api/admin/beans-log?page=${logsPage}&per=50`, { headers: headers() });
+    const d = await r.json();
+    const tbody = document.getElementById('logsBody');
+    tbody.innerHTML = d.logs.map(l => `
+      <tr>
+        <td>${l.id}</td>
+        <td>${l.email || l.user_id}</td>
+        <td><span class="badge ${l.delta > 0 ? 'badge-green' : 'badge-red'}">${l.delta > 0 ? '+' : ''}${l.delta}</span></td>
+        <td>${l.reason}</td>
+        <td>${fmtTime(l.created_at)}</td>
+      </tr>
+    `).join('');
+    document.getElementById('logsInfo').textContent = `共 ${d.total} 条，第 ${d.page} 页`;
+    document.getElementById('logsPrev').disabled = d.page <= 1;
+    document.getElementById('logsNext').disabled = d.logs.length < 50;
+  } catch {}
+}
+
+// Beans modal
+let beansUid = 0;
+function openBeansModal(uid, email) {
+  beansUid = uid;
+  document.getElementById('beansModalEmail').textContent = email;
+  document.getElementById('beansDelta').value = '';
+  document.getElementById('beansReason').value = '管理员调整';
+  document.getElementById('beansModal').classList.remove('hidden');
+}
+function closeBeansModal() { document.getElementById('beansModal').classList.add('hidden'); }
+
+async function submitBeans() {
+  const delta = parseInt(document.getElementById('beansDelta').value);
+  const reason = document.getElementById('beansReason').value.trim() || '管理员调整';
+  if (!delta || isNaN(delta)) return alert('请输入有效数量');
+  try {
+    const r = await fetch(`${API}/api/admin/user/${beansUid}/beans`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ delta, reason })
+    });
+    const d = await r.json();
+    if (d.error) alert(d.error);
+    else { closeBeansModal(); loadUsers(); loadStats(); }
+  } catch { alert('网络错误'); }
+}
+</script>
+</body>
+</html>

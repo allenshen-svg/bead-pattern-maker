@@ -132,6 +132,49 @@ class AuthManager {
   }
 }
 
+// ── Helpers ──
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.className = 'toast' + (type === 'error' ? ' toast-error' : '');
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => { t.classList.remove('show'); }, 2500);
+}
+
+function setFieldError(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg || '';
+  const input = el.previousElementSibling;
+  if (input && input.tagName === 'DIV') {
+    // pw-input-wrap case
+    const inp = input.querySelector('input');
+    if (inp) { inp.classList.toggle('input-error', !!msg); inp.classList.toggle('input-ok', !msg && inp.value.length > 0); }
+  } else if (input && input.tagName === 'INPUT') {
+    input.classList.toggle('input-error', !!msg);
+    input.classList.toggle('input-ok', !msg && input.value.length > 0);
+  }
+}
+
+function clearFieldError(id) { setFieldError(id, ''); }
+
+function setSubmitLoading(btn, loading, label) {
+  const textEl = btn.querySelector('.btn-text-label');
+  const spinEl = btn.querySelector('.btn-spinner');
+  if (loading) {
+    btn.disabled = true;
+    if (textEl) textEl.textContent = label || '';
+    if (spinEl) spinEl.classList.remove('hidden');
+  } else {
+    btn.disabled = false;
+    if (textEl) textEl.textContent = label || '';
+    if (spinEl) spinEl.classList.add('hidden');
+  }
+}
+
+const _emailRe = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+
 // ── Auth UI ──
 function initAuthUI(authManager) {
   const $ = id => document.getElementById(id);
@@ -147,7 +190,7 @@ function initAuthUI(authManager) {
         <button class="btn-text" id="logoutBtn">退出</button>
       `;
       const logoutBtn = $('logoutBtn');
-      if (logoutBtn) logoutBtn.onclick = () => { authManager.logout(); updateUserUI(); };
+      if (logoutBtn) logoutBtn.onclick = () => { authManager.logout(); updateUserUI(); showToast('已退出登录'); };
     } else {
       area.innerHTML = `<button class="btn btn-sm btn-outline" id="loginTrigger">登录 / 注册</button>`;
       const trigger = $('loginTrigger');
@@ -159,12 +202,14 @@ function initAuthUI(authManager) {
   function showAuthModal(message) {
     const modal = $('authModal');
     if (!modal) return;
+    // Clear all fields and errors
+    modal.querySelectorAll('input').forEach(i => { i.value = ''; i.classList.remove('input-error', 'input-ok'); });
+    modal.querySelectorAll('.field-error').forEach(e => e.textContent = '');
     modal.classList.remove('hidden');
     if (message) {
       const tip = modal.querySelector('.auth-tip');
       if (tip) tip.textContent = message;
     }
-    // Default to register tab
     switchTab('register');
   }
 
@@ -193,20 +238,66 @@ function initAuthUI(authManager) {
   if (closeBtn) closeBtn.onclick = hideAuthModal;
   authModal.addEventListener('click', e => { if (e.target === authModal) hideAuthModal(); });
 
+  // Password toggle
+  authModal.querySelectorAll('.pw-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = $(btn.dataset.target);
+      if (!target) return;
+      const show = target.type === 'password';
+      target.type = show ? 'text' : 'password';
+      btn.textContent = show ? '🙈' : '👁';
+      btn.setAttribute('aria-label', show ? '隐藏密码' : '显示密码');
+    });
+  });
+
+  // ── Real-time validation ──
+  const regEmail = $('regEmail');
+  const regCode = $('regCode');
+  const regPw = $('regPassword');
+  const regPwConfirm = $('regPasswordConfirm');
+  const loginEmail = $('loginEmail');
+  const loginPw = $('loginPassword');
+
+  if (regEmail) regEmail.addEventListener('blur', () => {
+    const v = regEmail.value.trim();
+    if (v && !_emailRe.test(v)) setFieldError('regEmailError', '请输入有效的邮箱地址');
+    else clearFieldError('regEmailError');
+  });
+  if (regPw) regPw.addEventListener('input', () => {
+    if (regPw.value && regPw.value.length < 6) setFieldError('regPasswordError', '密码至少6位');
+    else clearFieldError('regPasswordError');
+    if (regPwConfirm && regPwConfirm.value) {
+      if (regPwConfirm.value !== regPw.value) setFieldError('regPasswordConfirmError', '两次密码不一致');
+      else clearFieldError('regPasswordConfirmError');
+    }
+  });
+  if (regPwConfirm) regPwConfirm.addEventListener('input', () => {
+    if (regPwConfirm.value && regPw && regPwConfirm.value !== regPw.value) setFieldError('regPasswordConfirmError', '两次密码不一致');
+    else clearFieldError('regPasswordConfirmError');
+  });
+  if (loginEmail) loginEmail.addEventListener('blur', () => {
+    const v = loginEmail.value.trim();
+    if (v && !_emailRe.test(v)) setFieldError('loginEmailError', '请输入有效的邮箱地址');
+    else clearFieldError('loginEmailError');
+  });
+
   // Send code button
   const sendCodeBtn = $('sendCodeBtn');
   if (sendCodeBtn) {
     sendCodeBtn.addEventListener('click', async () => {
-      const email = $('regEmail').value.trim();
-      if (!email) return alert('请输入邮箱');
+      const email = regEmail ? regEmail.value.trim() : '';
+      if (!email) { setFieldError('regEmailError', '请输入邮箱'); return; }
+      if (!_emailRe.test(email)) { setFieldError('regEmailError', '请输入有效的邮箱地址'); return; }
+      clearFieldError('regEmailError');
       sendCodeBtn.disabled = true;
       sendCodeBtn.textContent = '发送中…';
       const res = await authManager.sendCode(email, 'register');
       if (res.error) {
-        alert(res.error);
+        setFieldError('regEmailError', res.error);
         sendCodeBtn.disabled = false;
         sendCodeBtn.textContent = '发送验证码';
       } else {
+        showToast('验证码已发送到邮箱');
         let sec = 60;
         const timer = setInterval(() => {
           sec--;
@@ -226,21 +317,38 @@ function initAuthUI(authManager) {
   if (regForm) {
     regForm.addEventListener('submit', async e => {
       e.preventDefault();
-      const email = $('regEmail').value.trim();
-      const code = $('regCode').value.trim();
-      const pw = $('regPassword').value;
-      if (!email || !code || !pw) return alert('请填写所有字段');
+      const email = regEmail ? regEmail.value.trim() : '';
+      const code = regCode ? regCode.value.trim() : '';
+      const pw = regPw ? regPw.value : '';
+      const pwc = regPwConfirm ? regPwConfirm.value : '';
+
+      // Validate
+      let valid = true;
+      if (!email || !_emailRe.test(email)) { setFieldError('regEmailError', '请输入有效的邮箱地址'); valid = false; }
+      else clearFieldError('regEmailError');
+      if (!code || code.length !== 6) { setFieldError('regCodeError', '请输入6位验证码'); valid = false; }
+      else clearFieldError('regCodeError');
+      if (!pw || pw.length < 6) { setFieldError('regPasswordError', '密码至少6位'); valid = false; }
+      else clearFieldError('regPasswordError');
+      if (pw !== pwc) { setFieldError('regPasswordConfirmError', '两次密码不一致'); valid = false; }
+      else clearFieldError('regPasswordConfirmError');
+      if (!valid) return;
+
       const btn = regForm.querySelector('button[type=submit]');
-      btn.disabled = true;
-      btn.textContent = '注册中…';
+      setSubmitLoading(btn, true, '注册中…');
       const res = await authManager.register(email, code, pw);
       if (res.error) {
-        alert(res.error);
-        btn.disabled = false;
-        btn.textContent = '注册';
+        setSubmitLoading(btn, false, '注册');
+        // Map server error to appropriate field
+        if (res.error.includes('邮箱')) setFieldError('regEmailError', res.error);
+        else if (res.error.includes('验证码')) setFieldError('regCodeError', res.error);
+        else if (res.error.includes('密码')) setFieldError('regPasswordError', res.error);
+        else showToast(res.error, 'error');
       } else {
+        setSubmitLoading(btn, false, '注册');
         hideAuthModal();
         updateUserUI();
+        showToast('🎉 注册成功！已赠送 3 个免费豆子');
       }
     });
   }
@@ -250,21 +358,38 @@ function initAuthUI(authManager) {
   if (loginForm) {
     loginForm.addEventListener('submit', async e => {
       e.preventDefault();
-      const email = $('loginEmail').value.trim();
-      const pw = $('loginPassword').value;
-      if (!email || !pw) return alert('请填写邮箱和密码');
+      const email = loginEmail ? loginEmail.value.trim() : '';
+      const pw = loginPw ? loginPw.value : '';
+
+      let valid = true;
+      if (!email) { setFieldError('loginEmailError', '请输入邮箱地址'); valid = false; }
+      else clearFieldError('loginEmailError');
+      if (!pw) { setFieldError('loginPasswordError', '请输入密码'); valid = false; }
+      else clearFieldError('loginPasswordError');
+      if (!valid) return;
+
       const btn = loginForm.querySelector('button[type=submit]');
-      btn.disabled = true;
-      btn.textContent = '登录中…';
+      setSubmitLoading(btn, true, '登录中…');
       const res = await authManager.login(email, pw);
       if (res.error) {
-        alert(res.error);
-        btn.disabled = false;
-        btn.textContent = '登录';
+        setSubmitLoading(btn, false, '登录');
+        if (res.error.includes('过多')) showToast(res.error, 'error');
+        else setFieldError('loginPasswordError', res.error);
       } else {
+        setSubmitLoading(btn, false, '登录');
         hideAuthModal();
         updateUserUI();
+        showToast('登录成功');
       }
+    });
+  }
+
+  // Forgot password link
+  const forgotLink = $('forgotPasswordLink');
+  if (forgotLink) {
+    forgotLink.addEventListener('click', e => {
+      e.preventDefault();
+      showToast('密码重置功能即将上线', 'error');
     });
   }
 
