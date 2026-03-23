@@ -486,52 +486,105 @@ class BeadPatternApp {
   /* ═══════════ Gallery ═══════════ */
 
   _openGallery() {
-    if (typeof GALLERY_DATA === 'undefined' || !GALLERY_DATA.length) return;
     const modal = document.getElementById('galleryModal');
-    const tabs = document.getElementById('galleryTabs');
-    const grid = document.getElementById('galleryGrid');
+    if (!this._galleryMode) this._galleryMode = 'emoji';
 
-    // Build tabs (only once)
-    if (!tabs.children.length) {
-      GALLERY_DATA.forEach((cat, i) => {
-        const tab = document.createElement('div');
-        tab.className = 'gallery-tab' + (i === 0 ? ' active' : '');
-        tab.textContent = cat.name;
-        tab.dataset.idx = i;
-        tab.addEventListener('click', () => {
-          tabs.querySelectorAll('.gallery-tab').forEach(t => t.classList.remove('active'));
-          tab.classList.add('active');
-          this._renderGalleryGrid(parseInt(tab.dataset.idx));
-        });
-        tabs.appendChild(tab);
-      });
-    }
+    // Mode switch buttons
+    modal.querySelectorAll('.gallery-mode-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === this._galleryMode);
+      btn.onclick = () => {
+        this._galleryMode = btn.dataset.mode;
+        modal.querySelectorAll('.gallery-mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+        this._galleryTabsBuilt = false;
+        document.getElementById('galleryTabs').innerHTML = '';
+        this._buildGalleryTabs();
+        this._renderGalleryGrid(0);
+      };
+    });
 
+    this._buildGalleryTabs();
     this._renderGalleryGrid(0);
     modal.classList.remove('hidden');
   }
 
+  _getGallerySource() {
+    if (this._galleryMode === 'pattern' && typeof PATTERN_GALLERY !== 'undefined') return PATTERN_GALLERY;
+    if (typeof GALLERY_DATA !== 'undefined') return GALLERY_DATA;
+    return [];
+  }
+
+  _buildGalleryTabs() {
+    const tabs = document.getElementById('galleryTabs');
+    if (tabs.children.length) return;
+    const source = this._getGallerySource();
+    source.forEach((cat, i) => {
+      const tab = document.createElement('div');
+      tab.className = 'gallery-tab' + (i === 0 ? ' active' : '');
+      tab.textContent = cat.name;
+      tab.dataset.idx = i;
+      tab.addEventListener('click', () => {
+        tabs.querySelectorAll('.gallery-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        this._renderGalleryGrid(parseInt(tab.dataset.idx));
+      });
+      tabs.appendChild(tab);
+    });
+  }
+
   _renderGalleryGrid(catIdx) {
     const grid = document.getElementById('galleryGrid');
-    const cat = GALLERY_DATA[catIdx];
+    const source = this._getGallerySource();
+    const cat = source[catIdx];
     if (!cat) return;
 
-    grid.innerHTML = cat.items.map((item, i) => `
-      <div class="gallery-item" data-cat="${catIdx}" data-idx="${i}">
-        <img src="${item.url}" alt="${item.name}" loading="lazy">
-        <span>${item.name}</span>
-      </div>
-    `).join('');
-
-    grid.querySelectorAll('.gallery-item').forEach(el => {
-      el.addEventListener('click', () => {
-        const ci = parseInt(el.dataset.cat);
-        const ii = parseInt(el.dataset.idx);
-        const item = GALLERY_DATA[ci].items[ii];
-        this._loadImageFromUrl(item.url, item.name);
-        document.getElementById('galleryModal').classList.add('hidden');
+    if (this._galleryMode === 'pattern') {
+      grid.innerHTML = cat.items.map((item, i) => {
+        const thumb = renderPatternThumb(item, 80);
+        return `<div class="gallery-item gallery-pattern-item" data-cat="${catIdx}" data-idx="${i}"><img src="${thumb}" alt="${item.name}"><span>${item.name}</span><small>${item.width}x${item.rows.length}</small></div>`;
+      }).join('');
+      grid.querySelectorAll('.gallery-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const ci = parseInt(el.dataset.cat);
+          const ii = parseInt(el.dataset.idx);
+          const item = source[ci].items[ii];
+          this._loadPattern(item);
+          document.getElementById('galleryModal').classList.add('hidden');
+        });
       });
-    });
+    } else {
+      grid.innerHTML = cat.items.map((item, i) => `
+        <div class="gallery-item" data-cat="${catIdx}" data-idx="${i}">
+          <img src="${item.url}" alt="${item.name}" loading="lazy">
+          <span>${item.name}</span>
+        </div>
+      `).join('');
+      grid.querySelectorAll('.gallery-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const ci = parseInt(el.dataset.cat);
+          const ii = parseInt(el.dataset.idx);
+          const item = source[ci].items[ii];
+          this._loadImageFromUrl(item.url, item.name);
+          document.getElementById('galleryModal').classList.add('hidden');
+        });
+      });
+    }
+  }
+
+  _loadPattern(patternData) {
+    const brand = document.getElementById('brandSelect').value;
+    const palette = BEAD_PALETTES[brand].colors;
+    this.pattern = decodePattern(patternData, palette);
+    this.image = null;
+    this.croppedImage = null;
+    document.getElementById('emptyState').classList.add('hidden');
+    document.querySelector('.pattern-container').classList.add('has-pattern');
+    this._fitAndDraw();
+    this._renderLegend();
+    this._renderStats();
+    document.getElementById('exportBtn').disabled = false;
+    document.getElementById('exportPdfBtn').disabled = false;
+    document.getElementById('compareBtn').classList.add('hidden');
+    trackEvent('load_pattern', { name: patternData.name, w: patternData.width });
   }
 
   _refreshHeightLabel() {
