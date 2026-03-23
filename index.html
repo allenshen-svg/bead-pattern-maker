@@ -13,7 +13,8 @@
   <meta name="robots" content="index, follow">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
   <title>拼豆图案生成器 | 免费在线拼豆图纸制作工具</title>
-  <link rel="stylesheet" href="css/style.css?v=20260323a">
+  <link rel="stylesheet" href="css/style.css?v=20260323b">
+  <style>@font-face { font-family: 'Zpix'; src: url('https://cdn.jsdelivr.net/gh/SolidZORO/zpix-pixel-font@master/dist/Zpix.woff2') format('woff2'); font-display: swap; }</style>
   <!-- 51.la 统计 -->
   <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js?id=3129971&ck=3129971"></script>
 </head>
@@ -238,9 +239,44 @@
     <div class="gallery-mode-switch">
       <button class="gallery-mode-btn active" data-mode="emoji">🎨 表情素材</button>
       <button class="gallery-mode-btn" data-mode="pattern">🧩 拼豆图案</button>
+      <button class="gallery-mode-btn" data-mode="text">✒️ 像素文字</button>
     </div>
     <div class="gallery-tabs" id="galleryTabs"></div>
     <div class="gallery-grid" id="galleryGrid"></div>
+    <!-- Pixel Text Panel (hidden by default) -->
+    <div id="pixelTextPanel" class="pixel-text-panel hidden">
+      <div class="pt-input-row">
+        <input type="text" id="ptInput" class="pt-input" placeholder="输入文字，如：对 不对 666 ❤" maxlength="10">
+        <button id="ptGenBtn" class="btn btn-primary pt-gen-btn">生成图案</button>
+      </div>
+      <div class="pt-options">
+        <label>字号：<select id="ptSize"><option value="12">12px 迷你</option><option value="16" selected>16px 小</option><option value="20">20px 中</option><option value="24">24px 大</option><option value="32">32px 特大</option></select></label>
+        <label>前景：<select id="ptFg"><option value="H23">纯黑 H23</option><option value="F10">正红 F10</option><option value="C6">蓝 C6</option><option value="B4">鲜绿 B4</option><option value="D5">紫 D5</option><option value="A4">鲜黄 A4</option><option value="A11">鲜橙 A11</option></select></label>
+        <label>背景：<select id="ptBg"><option value=".">透明(无)</option><option value="H19">纯白 H19</option><option value="A2">淡柠檬 A2</option></select></label>
+      </div>
+      <div class="pt-preview-area">
+        <div id="ptPreview" class="pt-preview"></div>
+        <div id="ptInfo" class="pt-info"></div>
+      </div>
+      <div class="pt-presets">
+        <span class="pt-preset-label">热门文字：</span>
+        <button class="pt-preset" data-text="对">对</button>
+        <button class="pt-preset" data-text="不">不</button>
+        <button class="pt-preset" data-text="666">666</button>
+        <button class="pt-preset" data-text="❤">❤</button>
+        <button class="pt-preset" data-text="OK">OK</button>
+        <button class="pt-preset" data-text="No">No</button>
+        <button class="pt-preset" data-text="哈">哈</button>
+        <button class="pt-preset" data-text="了">了</button>
+        <button class="pt-preset" data-text="烦">烦</button>
+        <button class="pt-preset" data-text="Hi">Hi</button>
+        <button class="pt-preset" data-text="GG">GG</button>
+        <button class="pt-preset" data-text="?">?</button>
+        <button class="pt-preset" data-text="!">!</button>
+        <button class="pt-preset" data-text="爱">爱</button>
+        <button class="pt-preset" data-text="墨">墨</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -383,11 +419,12 @@
   </div>
 </div>
 
-<script src="js/gallery.js?v=20260323a"></script>
-<script src="js/gallery-patterns.js?v=20260323a"></script>
-<script src="js/colors.js?v=20260323a"></script>
-<script src="js/converter.js?v=20260323a"></script>
-<script src="js/auth.js?v=20260323a"></script>
-<script src="js/app.js?v=20260323a"></script>
+<script src="js/gallery.js?v=20260323b"></script>
+<script src="js/gallery-patterns.js?v=20260323b"></script>
+<script src="js/pixel-text.js?v=20260323b"></script>
+<script src="js/colors.js?v=20260323b"></script>
+<script src="js/converter.js?v=20260323b"></script>
+<script src="js/auth.js?v=20260323b"></script>
+<script src="js/app.js?v=20260323b"></script>
 </body>
 </html>

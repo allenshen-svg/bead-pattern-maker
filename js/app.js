@@ -499,12 +499,76 @@ class BeadPatternApp {
         document.getElementById('galleryTabs').innerHTML = '';
         this._buildGalleryTabs();
         this._renderGalleryGrid(0);
+        this._toggleTextPanel();
       };
     });
 
     this._buildGalleryTabs();
     this._renderGalleryGrid(0);
+    this._toggleTextPanel();
+    this._initPixelTextOnce();
     modal.classList.remove('hidden');
+  }
+
+  _toggleTextPanel() {
+    const textPanel = document.getElementById('pixelTextPanel');
+    const tabs = document.getElementById('galleryTabs');
+    const grid = document.getElementById('galleryGrid');
+    if (this._galleryMode === 'text') {
+      textPanel.classList.remove('hidden');
+      tabs.classList.add('hidden');
+      grid.classList.add('hidden');
+    } else {
+      textPanel.classList.add('hidden');
+      tabs.classList.remove('hidden');
+      grid.classList.remove('hidden');
+    }
+  }
+
+  _initPixelTextOnce() {
+    if (this._ptInited) return;
+    this._ptInited = true;
+    const input = document.getElementById('ptInput');
+    const genBtn = document.getElementById('ptGenBtn');
+    const self = this;
+
+    genBtn.addEventListener('click', () => self._generatePixelText());
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') self._generatePixelText(); });
+
+    document.querySelectorAll('.pt-preset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        input.value = btn.dataset.text;
+        self._generatePixelText();
+      });
+    });
+  }
+
+  _generatePixelText() {
+    const text = document.getElementById('ptInput').value.trim();
+    if (!text) return;
+    const fontSize = parseInt(document.getElementById('ptSize').value);
+    const fgColor = document.getElementById('ptFg').value;
+    const bgColor = document.getElementById('ptBg').value;
+
+    const patternData = PixelTextGenerator.generate(text, fontSize, fgColor, bgColor);
+    if (!patternData) return;
+
+    this._currentTextPattern = patternData;
+
+    // Show preview
+    const preview = document.getElementById('ptPreview');
+    const thumb = PixelTextGenerator.renderPreview(patternData, 200);
+    preview.innerHTML = `<img src="${thumb}" alt="${text}" style="image-rendering:pixelated; max-width:100%; max-height:200px; cursor:pointer;" title="点击使用此图案">`;
+    preview.querySelector('img').addEventListener('click', () => {
+      this._loadPattern(patternData);
+      document.getElementById('galleryModal').classList.add('hidden');
+    });
+
+    // Show info
+    const info = document.getElementById('ptInfo');
+    info.innerHTML = `<b>${patternData.width} × ${patternData.rows.length}</b> 珠 · 点击预览图使用`;
+
+    trackEvent('pixel_text', { text: text.slice(0, 5), size: fontSize });
   }
 
   _getGallerySource() {
