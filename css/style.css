@@ -1112,3 +1112,55 @@ input[type="range"] { margin-top: 3px; }
   .recharge-grid { grid-template-columns: repeat(2, 1fr); }
   .recharge-modal-box { max-width: 95vw; padding: 16px; }
 }
+
+/* ── SEO Footer ── */
+.seo-footer {
+  background: #1e293b;
+  color: #cbd5e1;
+  padding: 40px 20px 20px;
+  margin-top: 40px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.seo-footer-inner {
+  max-width: 900px;
+  margin: 0 auto;
+}
+.seo-footer h2 {
+  color: #f1f5f9;
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+.seo-footer h3 {
+  color: #e2e8f0;
+  font-size: 15px;
+  margin: 20px 0 8px;
+}
+.seo-footer p { margin-bottom: 8px; }
+.seo-footer ul, .seo-footer ol {
+  padding-left: 20px;
+  margin-bottom: 8px;
+}
+.seo-footer li { margin-bottom: 4px; }
+.seo-footer a { color: #818cf8; text-decoration: none; }
+.seo-footer a:hover { text-decoration: underline; }
+.seo-footer details {
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+.seo-footer summary {
+  font-weight: 600;
+  color: #e2e8f0;
+}
+.seo-footer details p {
+  padding-left: 12px;
+  color: #94a3b8;
+}
+.seo-copy {
+  text-align: center;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #334155;
+  color: #64748b;
+  font-size: 12px;
+}
