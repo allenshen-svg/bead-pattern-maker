@@ -109,6 +109,7 @@ main {
   margin: 0 auto;
   padding: 16px;
   gap: 16px;
+  height: calc(100vh - 110px);
 }
 
 /* ── Sidebar ── */
@@ -454,6 +455,8 @@ input[type="range"] { margin-top: 3px; }
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+  overflow-y: auto;
+  min-height: 0;
 }
 .pattern-container {
   position: relative;
@@ -461,13 +464,12 @@ input[type="range"] { margin-top: 3px; }
 }
 .pattern-container canvas { display: none; width: 100%; height: 100%; }
 .pattern-container.has-pattern {
-  height: 55vh;
+  flex: 1;
+  min-height: 300px;
   background: var(--sf);
   border: 1px solid var(--bd);
   resize: vertical;
   overflow: auto;
-  min-height: 200px;
-  max-height: 85vh;
 }
 .pattern-container.has-pattern canvas { display: block; }
 .empty-state {
@@ -548,7 +550,7 @@ input[type="range"] { margin-top: 3px; }
   text-transform: uppercase;
   letter-spacing: .5px;
 }
-.legend-content { display: flex; flex-wrap: wrap; gap: 6px; }
+.legend-content { display: flex; flex-wrap: wrap; gap: 6px; max-height: 260px; overflow-y: auto; }
 .legend-item {
   display: flex;
   align-items: center;
@@ -834,7 +836,7 @@ input[type="range"] { margin-top: 3px; }
 @media (max-width: 800px) {
   main { flex-direction: column; height: auto; }
   .controls { width: 100%; }
-  .pattern-container.has-pattern { height: 45vh; }
+  .pattern-container.has-pattern { flex: none; height: 50vh; }
   .feature-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
