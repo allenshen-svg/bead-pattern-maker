@@ -780,15 +780,14 @@ class BeadPatternApp {
         const py = AXIS_M + y * CELL;
         ctx.beginPath(); ctx.moveTo(AXIS_M, py); ctx.lineTo(AXIS_M + W * CELL, py); ctx.stroke();
       }
-      // Major grid every 5 or 10
-      const major = W > 50 ? 10 : 5;
-      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-      ctx.lineWidth = 1;
-      for (let x = 0; x <= W; x += major) {
+      // Major grid every 5
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = 1.2;
+      for (let x = 5; x <= W; x += 5) {
         const px = AXIS_M + x * CELL;
         ctx.beginPath(); ctx.moveTo(px, AXIS_M); ctx.lineTo(px, AXIS_M + H * CELL); ctx.stroke();
       }
-      for (let y = 0; y <= H; y += major) {
+      for (let y = 5; y <= H; y += 5) {
         const py = AXIS_M + y * CELL;
         ctx.beginPath(); ctx.moveTo(AXIS_M, py); ctx.lineTo(AXIS_M + W * CELL, py); ctx.stroke();
       }
@@ -1127,11 +1126,10 @@ class BeadPatternApp {
     for (let x = 0; x <= W; x++) { ctx.beginPath(); ctx.moveTo(AXIS+x*CELL, AXIS); ctx.lineTo(AXIS+x*CELL, AXIS+H*CELL); ctx.stroke(); }
     for (let y = 0; y <= H; y++) { ctx.beginPath(); ctx.moveTo(AXIS, AXIS+y*CELL); ctx.lineTo(AXIS+W*CELL, AXIS+y*CELL); ctx.stroke(); }
 
-    // Major grid
-    const major = W > 50 ? 10 : 5;
-    ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
-    for (let x = 0; x <= W; x += major) { ctx.beginPath(); ctx.moveTo(AXIS+x*CELL, AXIS); ctx.lineTo(AXIS+x*CELL, AXIS+H*CELL); ctx.stroke(); }
-    for (let y = 0; y <= H; y += major) { ctx.beginPath(); ctx.moveTo(AXIS, AXIS+y*CELL); ctx.lineTo(AXIS+W*CELL, AXIS+y*CELL); ctx.stroke(); }
+    // Major grid every 5
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.2;
+    for (let x = 5; x <= W; x += 5) { ctx.beginPath(); ctx.moveTo(AXIS+x*CELL, AXIS); ctx.lineTo(AXIS+x*CELL, AXIS+H*CELL); ctx.stroke(); }
+    for (let y = 5; y <= H; y += 5) { ctx.beginPath(); ctx.moveTo(AXIS, AXIS+y*CELL); ctx.lineTo(AXIS+W*CELL, AXIS+y*CELL); ctx.stroke(); }
 
     // Border
     ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
