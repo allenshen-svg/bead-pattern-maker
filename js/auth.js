@@ -385,7 +385,7 @@ function initAuthUI(authManager) {
         hideAuthModal();
         _modalForced = false;
         updateUserUI();
-        showToast('🎉 注册成功！已赠送 3 个免费豆子');
+        showToast('🎉 注册成功！已赠送 30 个免费豆子');
       }
     });
   }
