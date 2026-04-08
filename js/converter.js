@@ -93,12 +93,16 @@ class BeadConverter {
     ctx.drawImage(image, 0, 0, gridWidth, gridHeight);
     const smData = ctx.getImageData(0, 0, gridWidth, gridHeight).data;
 
-    // Merge: use nearest-neighbor pixel if it's dark (outline), else smooth pixel
+    // Merge: use nearest-neighbor pixel if it's a black outline, else smooth pixel
+    // Outline = dark (brightness < 80) AND low chroma (max-min < 50) — achromatic
+    // This preserves dark brown/colored features while still fixing black+color blending
     const imgData = ctx.getImageData(0, 0, gridWidth, gridHeight);
     const px = imgData.data;
     for (let j = 0; j < px.length; j += 4) {
       const nnBri = (nnData[j] * 299 + nnData[j+1] * 587 + nnData[j+2] * 114) / 1000;
-      if (nnBri < 80) {
+      const nnChroma = Math.max(nnData[j], nnData[j+1], nnData[j+2]) - Math.min(nnData[j], nnData[j+1], nnData[j+2]);
+      if (nnBri < 80 && nnChroma < 50) {
+        // True black/gray outline — use NN to avoid color bleed from smoothing
         px[j] = nnData[j]; px[j+1] = nnData[j+1]; px[j+2] = nnData[j+2]; px[j+3] = nnData[j+3];
       } else {
         px[j] = smData[j]; px[j+1] = smData[j+1]; px[j+2] = smData[j+2]; px[j+3] = smData[j+3];
@@ -117,9 +121,10 @@ class BeadConverter {
       for (let x = 0; x < gridWidth; x++) {
         const i = (y * gridWidth + x) * 4;
         if (px[i+3] < 128) { row.push(null); continue; }   // transparent → empty
-        // Skip error diffusion for dark pixels (outlines) to prevent color bleeding
+        // Skip error diffusion for black outline pixels (dark + achromatic)
         const origBri = (px[i] * 299 + px[i+1] * 587 + px[i+2] * 114) / 1000;
-        const isDark = origBri < 80;
+        const origChroma = Math.max(px[i], px[i+1], px[i+2]) - Math.min(px[i], px[i+1], px[i+2]);
+        const isDark = origBri < 80 && origChroma < 50;
         const r = isDark ? px[i]   : Math.max(0, Math.min(255, Math.round(px[i]   + errCurR[x])));
         const g = isDark ? px[i+1] : Math.max(0, Math.min(255, Math.round(px[i+1] + errCurG[x])));
         const b = isDark ? px[i+2] : Math.max(0, Math.min(255, Math.round(px[i+2] + errCurB[x])));
@@ -218,11 +223,12 @@ class BeadConverter {
         const c = grid[y][x];
         if (!c) continue;
         if (keep.has(c.code)) continue;
-        // Skip error diffusion for dark pixels (outlines)
+        // Skip error diffusion for black outline pixels (dark + achromatic)
         const bri = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
-        const r = bri < 80 ? c.rgb.r : Math.max(0, Math.min(255, Math.round(c.rgb.r + errR[y][x])));
-        const g = bri < 80 ? c.rgb.g : Math.max(0, Math.min(255, Math.round(c.rgb.g + errG[y][x])));
-        const b = bri < 80 ? c.rgb.b : Math.max(0, Math.min(255, Math.round(c.rgb.b + errB[y][x])));
+        const chroma = Math.max(c.rgb.r, c.rgb.g, c.rgb.b) - Math.min(c.rgb.r, c.rgb.g, c.rgb.b);
+        const r = (bri < 80 && chroma < 50) ? c.rgb.r : Math.max(0, Math.min(255, Math.round(c.rgb.r + errR[y][x])));
+        const g = (bri < 80 && chroma < 50) ? c.rgb.g : Math.max(0, Math.min(255, Math.round(c.rgb.g + errG[y][x])));
+        const b = (bri < 80 && chroma < 50) ? c.rgb.b : Math.max(0, Math.min(255, Math.round(c.rgb.b + errB[y][x])));
         const nc = this.findNearest(r, g, b, kept);
         grid[y][x] = nc;
         // Compute quantization error
