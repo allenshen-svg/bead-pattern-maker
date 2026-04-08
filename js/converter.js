@@ -75,19 +75,35 @@ class BeadConverter {
     const aspect = image.height / image.width;
     const gridHeight = Math.round(gridWidth * aspect);
 
-    // Down-sample via off-screen canvas
+    // Down-sample via off-screen canvas (nearest-neighbor to detect outlines)
     const cvs = document.createElement('canvas');
     cvs.width = gridWidth;
     cvs.height = gridHeight;
     const ctx = cvs.getContext('2d');
-    // Use high quality smoothing; for cartoon/pixel art, NEAREST would be better
-    // but for photos 'high' gives best fidelity
+
+    // Pass 1: nearest-neighbor to find dark outline pixels
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(image, 0, 0, gridWidth, gridHeight);
+    const nnData = ctx.getImageData(0, 0, gridWidth, gridHeight).data;
+
+    // Pass 2: smooth for non-outline areas (better gradients)
+    ctx.clearRect(0, 0, gridWidth, gridHeight);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(image, 0, 0, gridWidth, gridHeight);
+    const smData = ctx.getImageData(0, 0, gridWidth, gridHeight).data;
 
+    // Merge: use nearest-neighbor pixel if it's dark (outline), else smooth pixel
     const imgData = ctx.getImageData(0, 0, gridWidth, gridHeight);
     const px = imgData.data;
+    for (let j = 0; j < px.length; j += 4) {
+      const nnBri = (nnData[j] * 299 + nnData[j+1] * 587 + nnData[j+2] * 114) / 1000;
+      if (nnBri < 80) {
+        px[j] = nnData[j]; px[j+1] = nnData[j+1]; px[j+2] = nnData[j+2]; px[j+3] = nnData[j+3];
+      } else {
+        px[j] = smData[j]; px[j+1] = smData[j+1]; px[j+2] = smData[j+2]; px[j+3] = smData[j+3];
+      }
+    }
 
     // First pass — map every pixel to nearest bead colour with error diffusion
     const grid = [];
@@ -103,9 +119,10 @@ class BeadConverter {
         if (px[i+3] < 128) { row.push(null); continue; }   // transparent → empty
         // Skip error diffusion for dark pixels (outlines) to prevent color bleeding
         const origBri = (px[i] * 299 + px[i+1] * 587 + px[i+2] * 114) / 1000;
-        const r = origBri < 60 ? px[i]   : Math.max(0, Math.min(255, Math.round(px[i]   + errCurR[x])));
-        const g = origBri < 60 ? px[i+1] : Math.max(0, Math.min(255, Math.round(px[i+1] + errCurG[x])));
-        const b = origBri < 60 ? px[i+2] : Math.max(0, Math.min(255, Math.round(px[i+2] + errCurB[x])));
+        const isDark = origBri < 80;
+        const r = isDark ? px[i]   : Math.max(0, Math.min(255, Math.round(px[i]   + errCurR[x])));
+        const g = isDark ? px[i+1] : Math.max(0, Math.min(255, Math.round(px[i+1] + errCurG[x])));
+        const b = isDark ? px[i+2] : Math.max(0, Math.min(255, Math.round(px[i+2] + errCurB[x])));
         const c = this.findNearest(r, g, b, palette);
         row.push(c);
         counts[c.code] = (counts[c.code] || 0) + 1;
@@ -174,9 +191,9 @@ class BeadConverter {
         if (keep.has(c.code)) continue;
         // Skip error diffusion for dark pixels (outlines)
         const bri = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
-        const r = bri < 60 ? c.rgb.r : Math.max(0, Math.min(255, Math.round(c.rgb.r + errR[y][x])));
-        const g = bri < 60 ? c.rgb.g : Math.max(0, Math.min(255, Math.round(c.rgb.g + errG[y][x])));
-        const b = bri < 60 ? c.rgb.b : Math.max(0, Math.min(255, Math.round(c.rgb.b + errB[y][x])));
+        const r = bri < 80 ? c.rgb.r : Math.max(0, Math.min(255, Math.round(c.rgb.r + errR[y][x])));
+        const g = bri < 80 ? c.rgb.g : Math.max(0, Math.min(255, Math.round(c.rgb.g + errG[y][x])));
+        const b = bri < 80 ? c.rgb.b : Math.max(0, Math.min(255, Math.round(c.rgb.b + errB[y][x])));
         const nc = this.findNearest(r, g, b, kept);
         grid[y][x] = nc;
         // Compute quantization error
