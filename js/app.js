@@ -804,6 +804,7 @@ class BeadPatternApp {
           const c = grid[y][x];
           if (!c) continue;
           const brightness = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
+          if (brightness > 220) continue;
           ctx.fillStyle = brightness > 140 ? '#000' : '#FFF';
           ctx.fillText(c.code, AXIS_M + x * CELL + CELL / 2, AXIS_M + y * CELL + CELL / 2);
         }
@@ -1115,6 +1116,7 @@ class BeadPatternApp {
         ctx.font = `bold ${fs}px sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         const br = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
+        if (br > 220) continue;
         ctx.fillStyle = br > 140 ? '#000' : '#FFF';
         ctx.fillText(c.code, AXIS + x * CELL + CELL / 2, AXIS + y * CELL + CELL / 2);
       }
@@ -1419,6 +1421,7 @@ class BeadPatternApp {
             bCtx.font = `bold ${fs}px sans-serif`;
             bCtx.textAlign = 'center'; bCtx.textBaseline = 'middle';
             const br2 = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
+            if (br2 > 220) continue;
             bCtx.fillStyle = br2 > 140 ? '#000' : '#FFF';
             bCtx.fillText(c.code, px + boardCellPx / 2, py + boardCellPx / 2);
           }
