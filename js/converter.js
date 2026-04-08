@@ -101,9 +101,11 @@ class BeadConverter {
       for (let x = 0; x < gridWidth; x++) {
         const i = (y * gridWidth + x) * 4;
         if (px[i+3] < 128) { row.push(null); continue; }   // transparent → empty
-        const r = Math.max(0, Math.min(255, Math.round(px[i]   + errCurR[x])));
-        const g = Math.max(0, Math.min(255, Math.round(px[i+1] + errCurG[x])));
-        const b = Math.max(0, Math.min(255, Math.round(px[i+2] + errCurB[x])));
+        // Skip error diffusion for dark pixels (outlines) to prevent color bleeding
+        const origBri = (px[i] * 299 + px[i+1] * 587 + px[i+2] * 114) / 1000;
+        const r = origBri < 60 ? px[i]   : Math.max(0, Math.min(255, Math.round(px[i]   + errCurR[x])));
+        const g = origBri < 60 ? px[i+1] : Math.max(0, Math.min(255, Math.round(px[i+1] + errCurG[x])));
+        const b = origBri < 60 ? px[i+2] : Math.max(0, Math.min(255, Math.round(px[i+2] + errCurB[x])));
         const c = this.findNearest(r, g, b, palette);
         row.push(c);
         counts[c.code] = (counts[c.code] || 0) + 1;
@@ -170,10 +172,11 @@ class BeadConverter {
         const c = grid[y][x];
         if (!c) continue;
         if (keep.has(c.code)) continue;
-        // Add accumulated error to original RGB
-        const r = Math.max(0, Math.min(255, Math.round(c.rgb.r + errR[y][x])));
-        const g = Math.max(0, Math.min(255, Math.round(c.rgb.g + errG[y][x])));
-        const b = Math.max(0, Math.min(255, Math.round(c.rgb.b + errB[y][x])));
+        // Skip error diffusion for dark pixels (outlines)
+        const bri = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
+        const r = bri < 60 ? c.rgb.r : Math.max(0, Math.min(255, Math.round(c.rgb.r + errR[y][x])));
+        const g = bri < 60 ? c.rgb.g : Math.max(0, Math.min(255, Math.round(c.rgb.g + errG[y][x])));
+        const b = bri < 60 ? c.rgb.b : Math.max(0, Math.min(255, Math.round(c.rgb.b + errB[y][x])));
         const nc = this.findNearest(r, g, b, kept);
         grid[y][x] = nc;
         // Compute quantization error
