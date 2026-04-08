@@ -101,11 +101,16 @@ class BeadConverter {
     for (let j = 0; j < px.length; j += 4) {
       const nnBri = (nnData[j] * 299 + nnData[j+1] * 587 + nnData[j+2] * 114) / 1000;
       const nnChroma = Math.max(nnData[j], nnData[j+1], nnData[j+2]) - Math.min(nnData[j], nnData[j+1], nnData[j+2]);
+      // Use NN alpha to decide pixel existence (smooth alpha loses edges near transparency)
+      px[j+3] = nnData[j+3];
       if (nnBri < 80 && nnChroma < 50) {
         // True black/gray outline — use NN to avoid color bleed from smoothing
-        px[j] = nnData[j]; px[j+1] = nnData[j+1]; px[j+2] = nnData[j+2]; px[j+3] = nnData[j+3];
+        px[j] = nnData[j]; px[j+1] = nnData[j+1]; px[j+2] = nnData[j+2];
+      } else if (smData[j+3] < 128 && nnData[j+3] >= 128) {
+        // Edge pixel lost to smoothing — recover from NN
+        px[j] = nnData[j]; px[j+1] = nnData[j+1]; px[j+2] = nnData[j+2];
       } else {
-        px[j] = smData[j]; px[j+1] = smData[j+1]; px[j+2] = smData[j+2]; px[j+3] = smData[j+3];
+        px[j] = smData[j]; px[j+1] = smData[j+1]; px[j+2] = smData[j+2];
       }
     }
 
