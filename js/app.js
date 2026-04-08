@@ -106,6 +106,8 @@ class BeadPatternApp {
     this.showCodes  = true;
     this.showGrid   = true;
     this.showBoardLines = false;
+    this.hideBg     = false;
+    this.bgCode     = null;
 
     // Image adjustments
     this.brightness = 0;
@@ -220,6 +222,7 @@ class BeadPatternApp {
     $('showCodes').addEventListener('change', e => { this.showCodes = e.target.checked; this._draw(); });
     $('showGrid').addEventListener('change',  e => { this.showGrid  = e.target.checked; this._draw(); });
     $('showBoardLines').addEventListener('change', e => { this.showBoardLines = e.target.checked; this._draw(); });
+    $('hideBg').addEventListener('change', e => { this.hideBg = e.target.checked; this._draw(); });
 
     // ── Edit mode toggle ──
     $('editMode').addEventListener('change', e => {
@@ -682,6 +685,10 @@ class BeadPatternApp {
       const adjustedImage = this._applyAdjustments(srcImage);
       this.pattern = this.converter.convert(adjustedImage, width, palette, maxColors);
 
+      // Auto-detect background color (most common)
+      const counts = this.pattern.colorCounts;
+      this.bgCode = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
       document.getElementById('emptyState').classList.add('hidden');
       document.querySelector('.pattern-container').classList.add('has-pattern');
       this._fitAndDraw();
@@ -762,8 +769,7 @@ class BeadPatternApp {
       for (let x = 0; x < W; x++) {
         const c = grid[y][x];
         if (!c) continue;
-        const br = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
-        if (br > 220) continue;
+        if (this.hideBg && this.bgCode && c.code === this.bgCode) continue;
         const px = AXIS_M + x * CELL, py = AXIS_M + y * CELL;
         ctx.fillStyle = c.hex;
         ctx.fillRect(px, py, CELL, CELL);
@@ -805,8 +811,8 @@ class BeadPatternApp {
         for (let x = 0; x < W; x++) {
           const c = grid[y][x];
           if (!c) continue;
+          if (this.hideBg && this.bgCode && c.code === this.bgCode) continue;
           const brightness = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
-          if (brightness > 220) continue;
           ctx.fillStyle = brightness > 140 ? '#000' : '#FFF';
           ctx.fillText(c.code, AXIS_M + x * CELL + CELL / 2, AXIS_M + y * CELL + CELL / 2);
         }
@@ -1111,8 +1117,7 @@ class BeadPatternApp {
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const c = grid[y][x]; if (!c) continue;
-        const br0 = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
-        if (br0 > 220) continue;
+        if (this.hideBg && this.bgCode && c.code === this.bgCode) continue;
         ctx.fillStyle = c.hex;
         ctx.fillRect(AXIS + x * CELL, AXIS + y * CELL, CELL, CELL);
         // code
@@ -1120,7 +1125,6 @@ class BeadPatternApp {
         ctx.font = `bold ${fs}px sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         const br = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
-        if (br > 220) continue;
         ctx.fillStyle = br > 140 ? '#000' : '#FFF';
         ctx.fillText(c.code, AXIS + x * CELL + CELL / 2, AXIS + y * CELL + CELL / 2);
       }
@@ -1416,8 +1420,7 @@ class BeadPatternApp {
         for (let y = startY; y < endY; y++) {
           for (let x = startX; x < endX; x++) {
             const c = grid[y][x]; if (!c) continue;
-            const brB = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
-            if (brB > 220) continue;
+            if (this.hideBg && this.bgCode && c.code === this.bgCode) continue;
             const px = boardAxisPx + (x - startX) * boardCellPx;
             const py = boardAxisPx + (y - startY) * boardCellPx;
             bCtx.fillStyle = c.hex;
@@ -1427,7 +1430,6 @@ class BeadPatternApp {
             bCtx.font = `bold ${fs}px sans-serif`;
             bCtx.textAlign = 'center'; bCtx.textBaseline = 'middle';
             const br2 = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
-            if (br2 > 220) continue;
             bCtx.fillStyle = br2 > 140 ? '#000' : '#FFF';
             bCtx.fillText(c.code, px + boardCellPx / 2, py + boardCellPx / 2);
           }
