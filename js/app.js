@@ -762,6 +762,8 @@ class BeadPatternApp {
       for (let x = 0; x < W; x++) {
         const c = grid[y][x];
         if (!c) continue;
+        const br = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
+        if (br > 220) continue;
         const px = AXIS_M + x * CELL, py = AXIS_M + y * CELL;
         ctx.fillStyle = c.hex;
         ctx.fillRect(px, py, CELL, CELL);
@@ -1109,6 +1111,8 @@ class BeadPatternApp {
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const c = grid[y][x]; if (!c) continue;
+        const br0 = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
+        if (br0 > 220) continue;
         ctx.fillStyle = c.hex;
         ctx.fillRect(AXIS + x * CELL, AXIS + y * CELL, CELL, CELL);
         // code
@@ -1412,6 +1416,8 @@ class BeadPatternApp {
         for (let y = startY; y < endY; y++) {
           for (let x = startX; x < endX; x++) {
             const c = grid[y][x]; if (!c) continue;
+            const brB = (c.rgb.r * 299 + c.rgb.g * 587 + c.rgb.b * 114) / 1000;
+            if (brB > 220) continue;
             const px = boardAxisPx + (x - startX) * boardCellPx;
             const py = boardAxisPx + (y - startY) * boardCellPx;
             bCtx.fillStyle = c.hex;
