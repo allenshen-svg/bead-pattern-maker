@@ -170,9 +170,38 @@ class BeadConverter {
   /* ── Reduce to N most-used colours ────────────────────── */
 
   _reduceColors(grid, w, h, palette, counts, maxN) {
-    // Keep top-N colours by frequency, but also weight by visual importance
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-    const keep = new Set(sorted.slice(0, maxN).map(e => e[0]));
+    // Select N colors using frequency + color diversity (greedy max-min distance)
+    // 1. Build color info with Lab values
+    const colorInfo = Object.entries(counts).map(([code, cnt]) => {
+      const c = palette.find(p => p.code === code);
+      return { code, count: cnt, lab: c ? this.rgbToLab(c.rgb.r, c.rgb.g, c.rgb.b) : [0,0,0] };
+    });
+
+    // 2. Start with the most frequent color
+    const selected = [];
+    const remaining = [...colorInfo];
+    remaining.sort((a, b) => b.count - a.count);
+    selected.push(remaining.shift());
+
+    // 3. Greedily pick next color that maximizes: diversity_score * frequency_weight
+    while (selected.length < maxN && remaining.length > 0) {
+      let bestIdx = 0, bestScore = -1;
+      for (let i = 0; i < remaining.length; i++) {
+        const cand = remaining[i];
+        // Min distance to any already-selected color
+        let minDist = Infinity;
+        for (const sel of selected) {
+          const d = this.deltaE(cand.lab, sel.lab);
+          if (d < minDist) minDist = d;
+        }
+        // Score = distance * sqrt(frequency) — balances diversity and importance
+        const score = minDist * Math.sqrt(cand.count);
+        if (score > bestScore) { bestScore = score; bestIdx = i; }
+      }
+      selected.push(remaining.splice(bestIdx, 1)[0]);
+    }
+
+    const keep = new Set(selected.map(s => s.code));
     const kept = palette.filter(c => keep.has(c.code));
 
     // Clear cache for reduced palette lookups
