@@ -75,16 +75,33 @@ class BeadConverter {
     const aspect = image.height / image.width;
     const gridHeight = Math.round(gridWidth * aspect);
 
-    // Down-sample via off-screen canvas — use nearest-neighbor for clean edges
+    // Down-sample via off-screen canvas
     const cvs = document.createElement('canvas');
     cvs.width = gridWidth;
     cvs.height = gridHeight;
     const ctx = cvs.getContext('2d');
+
+    // Smooth pass: better color gradients
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(image, 0, 0, gridWidth, gridHeight);
+    const smData = new Uint8ClampedArray(ctx.getImageData(0, 0, gridWidth, gridHeight).data);
+
+    // NN pass: accurate alpha (edges) — smooth blurs alpha near transparency boundaries
+    ctx.clearRect(0, 0, gridWidth, gridHeight);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(image, 0, 0, gridWidth, gridHeight);
+    const nnData = ctx.getImageData(0, 0, gridWidth, gridHeight).data;
 
-    const imgData = ctx.getImageData(0, 0, gridWidth, gridHeight);
+    // Merge: smooth color + NN alpha
+    const imgData = ctx.createImageData(gridWidth, gridHeight);
     const px = imgData.data;
+    for (let j = 0; j < px.length; j += 4) {
+      px[j+3] = nnData[j+3];          // alpha from NN (sharp edges)
+      px[j]   = smData[j];            // color from smooth (better gradients)
+      px[j+1] = smData[j+1];
+      px[j+2] = smData[j+2];
+    }
 
     // First pass — map every pixel to nearest bead colour
     const grid = [];
