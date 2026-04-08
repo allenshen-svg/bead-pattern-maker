@@ -101,6 +101,10 @@ for code, hexc in MARD_COLORS:
     palette.append((code, hexc, rgb, lab))
 
 def find_nearest(r, g, b):
+    # Force very dark pixels to pure black (H23) to unify outlines
+    brightness = (r * 299 + g * 587 + b * 114) / 1000
+    if brightness < 60:
+        return ('H23', '#1A1A1A', (26, 26, 26), rgb_to_lab(26, 26, 26))
     lab = rgb_to_lab(r, g, b)
     best = min(palette, key=lambda c: delta_e(lab, c[3]))
     return best  # (code, hex, rgb, lab)
@@ -111,8 +115,8 @@ GRID_W = 50
 aspect = img.height / img.width
 GRID_H = round(GRID_W * aspect)
 
-# Downsample
-small = img.resize((GRID_W, GRID_H), Image.LANCZOS)
+# Downsample with NEAREST to preserve sharp black outlines
+small = img.resize((GRID_W, GRID_H), Image.NEAREST)
 
 # Convert to bead grid
 grid = []

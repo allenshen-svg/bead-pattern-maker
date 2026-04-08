@@ -80,26 +80,46 @@ class BeadConverter {
     cvs.width = gridWidth;
     cvs.height = gridHeight;
     const ctx = cvs.getContext('2d');
+    // Use high quality smoothing; for cartoon/pixel art, NEAREST would be better
+    // but for photos 'high' gives best fidelity
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'medium';
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(image, 0, 0, gridWidth, gridHeight);
 
     const imgData = ctx.getImageData(0, 0, gridWidth, gridHeight);
     const px = imgData.data;
 
-    // First pass — map every pixel to nearest bead colour
+    // First pass — map every pixel to nearest bead colour with error diffusion
     const grid = [];
     const counts = {};
+    // Error diffusion buffers (current row + next row)
+    let errCurR = new Float32Array(gridWidth), errCurG = new Float32Array(gridWidth), errCurB = new Float32Array(gridWidth);
+    let errNxtR = new Float32Array(gridWidth), errNxtG = new Float32Array(gridWidth), errNxtB = new Float32Array(gridWidth);
+
     for (let y = 0; y < gridHeight; y++) {
       const row = [];
       for (let x = 0; x < gridWidth; x++) {
         const i = (y * gridWidth + x) * 4;
         if (px[i+3] < 128) { row.push(null); continue; }   // transparent → empty
-        const c = this.findNearest(px[i], px[i+1], px[i+2], palette);
+        const r = Math.max(0, Math.min(255, Math.round(px[i]   + errCurR[x])));
+        const g = Math.max(0, Math.min(255, Math.round(px[i+1] + errCurG[x])));
+        const b = Math.max(0, Math.min(255, Math.round(px[i+2] + errCurB[x])));
+        const c = this.findNearest(r, g, b, palette);
         row.push(c);
         counts[c.code] = (counts[c.code] || 0) + 1;
+        // Distribute quantization error (Floyd-Steinberg)
+        const er = r - c.rgb.r, eg = g - c.rgb.g, eb = b - c.rgb.b;
+        if (x + 1 < gridWidth)  { errCurR[x+1] += er * 7/16; errCurG[x+1] += eg * 7/16; errCurB[x+1] += eb * 7/16; }
+        if (y + 1 < gridHeight) {
+          if (x - 1 >= 0)      { errNxtR[x-1] += er * 3/16; errNxtG[x-1] += eg * 3/16; errNxtB[x-1] += eb * 3/16; }
+                                  errNxtR[x]   += er * 5/16; errNxtG[x]   += eg * 5/16; errNxtB[x]   += eb * 5/16;
+          if (x + 1 < gridWidth){ errNxtR[x+1] += er * 1/16; errNxtG[x+1] += eg * 1/16; errNxtB[x+1] += eb * 1/16; }
+        }
       }
       grid.push(row);
+      // Swap rows
+      errCurR = errNxtR; errCurG = errNxtG; errCurB = errNxtB;
+      errNxtR = new Float32Array(gridWidth); errNxtG = new Float32Array(gridWidth); errNxtB = new Float32Array(gridWidth);
     }
 
     // Optional colour reduction
@@ -131,7 +151,7 @@ class BeadConverter {
   /* ── Reduce to N most-used colours ────────────────────── */
 
   _reduceColors(grid, w, h, palette, counts, maxN) {
-    // Keep top-N colours by frequency
+    // Keep top-N colours by frequency, but also weight by visual importance
     const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
     const keep = new Set(sorted.slice(0, maxN).map(e => e[0]));
     const kept = palette.filter(c => keep.has(c.code));
@@ -139,11 +159,32 @@ class BeadConverter {
     // Clear cache for reduced palette lookups
     this._labCache.clear();
 
+    // Remap with Floyd-Steinberg error diffusion for better visual fidelity
+    // Build Lab error buffer
+    const errR = Array.from({length: h}, () => new Float32Array(w));
+    const errG = Array.from({length: h}, () => new Float32Array(w));
+    const errB = Array.from({length: h}, () => new Float32Array(w));
+
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const c = grid[y][x];
-        if (!c || keep.has(c.code)) continue;
-        grid[y][x] = this.findNearest(c.rgb.r, c.rgb.g, c.rgb.b, kept);
+        if (!c) continue;
+        if (keep.has(c.code)) continue;
+        // Add accumulated error to original RGB
+        const r = Math.max(0, Math.min(255, Math.round(c.rgb.r + errR[y][x])));
+        const g = Math.max(0, Math.min(255, Math.round(c.rgb.g + errG[y][x])));
+        const b = Math.max(0, Math.min(255, Math.round(c.rgb.b + errB[y][x])));
+        const nc = this.findNearest(r, g, b, kept);
+        grid[y][x] = nc;
+        // Compute quantization error
+        const er = r - nc.rgb.r, eg = g - nc.rgb.g, eb = b - nc.rgb.b;
+        // Distribute error to neighbors (Floyd-Steinberg)
+        if (x + 1 < w)           { errR[y][x+1]   += er * 7/16; errG[y][x+1]   += eg * 7/16; errB[y][x+1]   += eb * 7/16; }
+        if (y + 1 < h) {
+          if (x - 1 >= 0)        { errR[y+1][x-1] += er * 3/16; errG[y+1][x-1] += eg * 3/16; errB[y+1][x-1] += eb * 3/16; }
+                                   errR[y+1][x]   += er * 5/16; errG[y+1][x]   += eg * 5/16; errB[y+1][x]   += eb * 5/16;
+          if (x + 1 < w)        { errR[y+1][x+1] += er * 1/16; errG[y+1][x+1] += eg * 1/16; errB[y+1][x+1] += eb * 1/16; }
+        }
       }
     }
   }
