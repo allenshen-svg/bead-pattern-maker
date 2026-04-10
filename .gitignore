@@ -4,5 +4,11 @@
 *~
 .vscode/
 node_modules/
-backend/
+backend/*
+!backend/server.py
+!backend/requirements.txt
+!backend/gunicorn.conf.py
+!backend/data/
+backend/data/*
+!backend/data/.gitignore
 _deploy_alipay.py

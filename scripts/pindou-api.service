@@ -1,0 +1,19 @@
+[Unit]
+Description=Pindou Bead Pattern API (Gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/pindou-api
+EnvironmentFile=/etc/pindou-api.env
+ExecStart=/opt/pindou-api/venv/bin/gunicorn -c /opt/pindou-api/gunicorn.conf.py server:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillSignal=SIGQUIT
+TimeoutStopSec=30
+Restart=always
+RestartSec=5
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

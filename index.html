@@ -20,9 +20,15 @@
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
   <meta name="author" content="pindou.top">
   <meta name="theme-color" content="#6c5ce7">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico?v=20260409c">
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=20260409c">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=20260409c">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260409c">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260409c">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260409c">
+  <link rel="manifest" href="/site.webmanifest?v=20260409c">
   <title>拼豆图案生成器 | 免费在线拼豆图纸制作工具</title>
-  <link rel="stylesheet" href="css/style.css?v=20260324a">
+  <link rel="stylesheet" href="css/style.css?v=20260410e">
   <style>@font-face { font-family: 'Zpix'; src: url('https://cdn.jsdelivr.net/gh/SolidZORO/zpix-pixel-font@master/dist/Zpix.woff2') format('woff2'); font-display: swap; }</style>
   <!-- 51.la 统计 -->
   <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
@@ -126,6 +132,25 @@
         <input type="file" id="fileInput" accept="image/*" hidden>
       </div>
       <button id="galleryBtn" class="btn btn-gallery">🖼️ 素材图库</button>
+      <div class="import-divider hidden"><span>或</span></div>
+      <div class="xhs-import-box hidden" aria-hidden="true">
+        <div class="xhs-import-head">
+          <strong>📕 导入小红书帖子</strong>
+          <small>粘贴帖子链接，或直接粘贴整段分享文案</small>
+        </div>
+        <textarea
+          id="xhsInput"
+          class="xhs-import-input"
+          rows="3"
+          placeholder="例如：https://www.xiaohongshu.com/explore/...&#10;也支持直接粘贴小红书分享文案"
+        ></textarea>
+        <button id="xhsImportBtn" class="btn btn-secondary xhs-import-btn">解析帖子图片</button>
+        <p id="xhsStatus" class="xhs-status hidden"></p>
+        <div id="xhsImportResult" class="xhs-result hidden">
+          <div id="xhsImportMeta" class="xhs-meta"></div>
+          <div id="xhsImportGrid" class="xhs-grid"></div>
+        </div>
+      </div>
       <div id="previewContainer" class="preview-container hidden">
         <div class="preview-img-wrap">
           <img id="previewImage" alt="预览">
@@ -138,6 +163,8 @@
           <button id="cropApply" class="btn btn-primary" style="font-size:12px;padding:5px;flex:1">✅ 应用裁剪</button>
           <button id="cropCancel" class="btn btn-secondary" style="font-size:12px;padding:5px;flex:1">✖ 取消</button>
         </div>
+        <button id="restoreBtn" class="btn btn-secondary restore-btn">🪄 智能还原原图</button>
+        <p id="restoreStatus" class="restore-status hidden"></p>
       </div>
     </section>
 
@@ -238,7 +265,8 @@
     <div class="pattern-container">
       <canvas id="patternCanvas"></canvas>
       <div class="empty-state" id="emptyState">
-        <div class="feature-showcase">
+        <div class="landing-showcase">
+          <div class="feature-showcase feature-highlights-block" id="featureHighlightsBlock">
           <h2>✨ 功能亮点</h2>
           <div class="feature-grid">
             <div class="feature-card">
@@ -283,6 +311,16 @@
             </div>
           </div>
           <p class="showcase-cta">👆 上传图片并点击「生成图案」开始体验</p>
+
+          </div>
+          <div class="feature-showcase effect-showcase-block" id="effectShowcaseBlock">
+          <h2 style="text-align:center;margin:28px 0 8px;font-size:1.25rem;">效果展示</h2>
+          <p style="text-align:center;color:#888;font-size:0.9rem;margin-bottom:16px;">拼豆是小型热熔珠，在底板上创建你的设计，熨烫使珠子融合在一起，享受你的像素艺术杰作！</p>
+          <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin-bottom:24px;">
+            <img src="img/demo-original.png" alt="原图示例" style="max-width:320px;width:45%;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+            <img src="img/demo-pattern.png" alt="拼豆图案示例" style="max-width:320px;width:45%;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+          </div>
+          </div>
         </div>
       </div>
     </div>
@@ -317,8 +355,10 @@
       <button class="modal-close" id="galleryClose">&times;</button>
     </div>
     <div class="gallery-mode-switch">
-      <button class="gallery-mode-btn active" data-mode="emoji">🎨 表情素材</button>
+      <button class="gallery-mode-btn active" data-mode="sbti">🧠 SBTI</button>
+      <button class="gallery-mode-btn" data-mode="emoji">🎨 表情素材</button>
       <button class="gallery-mode-btn" data-mode="pattern">🧩 拼豆图案</button>
+      <button class="gallery-mode-btn" data-mode="famous-ip">🌟 动漫IP</button>
       <button class="gallery-mode-btn" data-mode="text">✒️ 像素文字</button>
     </div>
     <div class="gallery-tabs" id="galleryTabs"></div>
@@ -429,7 +469,7 @@
   <div class="modal-box auth-modal-box">
     <button class="modal-close" id="authModalClose">&times;</button>
     <h2>🎨 欢迎使用拼豆工具</h2>
-    <p class="auth-tip">注册后即可获得 30 个免费豆子</p>
+    <p class="auth-tip" data-default-tip="注册后即可获得 10 个免费豆子">注册后即可获得 10 个免费豆子</p>
     <div class="auth-tabs">
       <button class="auth-tab active" data-tab="register">注册</button>
       <button class="auth-tab" data-tab="login">登录</button>
@@ -464,6 +504,12 @@
         </div>
         <span class="field-error" id="regPasswordConfirmError"></span>
       </div>
+      <div class="form-group">
+        <label for="regInvite">邀请码 <span class="label-optional">选填</span></label>
+        <input type="text" id="regInvite" placeholder="填写好友的邀请码可额外得豆" maxlength="12" autocomplete="off">
+        <span class="field-error" id="regInviteError"></span>
+        <p class="invite-field-tip" id="regInviteHint">填写邀请码可额外获得 2 个豆子；同设备或同网络邀请不计奖励</p>
+      </div>
       <button type="submit" class="btn btn-primary btn-full"><span class="btn-text-label">注册</span><span class="btn-spinner hidden"></span></button>
     </form>
     <form id="loginForm" class="auth-form hidden" novalidate>
@@ -492,9 +538,85 @@
     <button class="modal-close" id="noBeansClose">&times;</button>
     <h2>🫘 豆子不足</h2>
     <p>生成图案需要消耗 1 个豆子，您当前余额为 <b id="beansCount">0</b> 豆。</p>
-    <p>充值豆子后即可继续使用:</p>
+    <p>可以立即充值继续使用，也可以把邀请码发给朋友。好友首次生成图案后，你会自动获得 4 豆奖励。</p>
+    <p class="nobeans-note">提示：同设备或同网络下的异常邀请不计奖励。</p>
     <div class="nobeans-actions">
+      <button class="btn btn-outline" id="inviteEarnBtn">📨 邀请好友赚豆</button>
       <button class="btn btn-primary" id="goRechargeBtn">💰 立即充值</button>
+    </div>
+  </div>
+</div>
+
+<div id="inviteModal" class="modal-overlay hidden">
+  <div class="modal-box invite-modal-box">
+    <div class="invite-modal-head">
+      <div class="invite-modal-copy">
+        <h2>📨 邀请好友赚豆</h2>
+        <p>把邀请码发给朋友。对方注册填写后可额外获得 2 豆；对方首次生成图案后，你再获得 4 豆奖励。</p>
+      </div>
+      <button class="modal-close invite-modal-close" id="inviteModalClose" aria-label="关闭邀请弹窗">&times;</button>
+    </div>
+    <div id="inviteLoading" class="invite-loading">加载中…</div>
+    <div id="inviteBody" class="hidden">
+      <div class="invite-summary-card">
+        <div>
+          <div class="invite-code-label">我的邀请码</div>
+          <div class="invite-code-value" id="inviteCodeValue">-</div>
+        </div>
+        <button class="btn btn-primary" id="copyInviteLinkBtn">复制邀请链接</button>
+      </div>
+
+      <div class="invite-share-field">
+        <label for="inviteLinkInput">邀请链接</label>
+        <input type="text" id="inviteLinkInput" readonly>
+      </div>
+
+      <div class="invite-share-actions">
+        <button class="btn btn-outline" id="copyInviteCodeBtn">复制邀请码</button>
+        <button class="btn btn-primary" id="copyInviteMessageBtn">复制邀请文案</button>
+      </div>
+
+      <div class="invite-share-preview">
+        <div class="invite-share-preview-label">建议直接复制这段发给朋友</div>
+        <div class="invite-share-preview-text" id="inviteSharePreview"></div>
+      </div>
+
+      <div class="invite-stats-grid">
+        <div class="invite-stat-card">
+          <b id="inviteTotalCount">0</b>
+          <span>全部邀请</span>
+        </div>
+        <div class="invite-stat-card">
+          <b id="inviteRewardedCount">0</b>
+          <span>已激活</span>
+        </div>
+        <div class="invite-stat-card">
+          <b id="invitePendingCount">0</b>
+          <span>待激活</span>
+        </div>
+        <div class="invite-stat-card">
+          <b id="inviteBlockedCount">0</b>
+          <span>未计奖励</span>
+        </div>
+        <div class="invite-stat-card">
+          <b id="inviteRewardedBeans">0</b>
+          <span>已赚豆子</span>
+        </div>
+      </div>
+
+      <div class="invite-rules-card">
+        <h3>奖励规则</h3>
+        <ul class="invite-rules-list" id="inviteRulesList">
+          <li>好友注册并填写邀请码：对方 +2 豆</li>
+          <li>好友首次生成图案：你 +4 豆</li>
+          <li>同设备或同网络下的异常邀请不计奖励</li>
+        </ul>
+      </div>
+
+      <div class="invite-recent">
+        <h3>最近邀请</h3>
+        <div id="inviteRecentList" class="invite-recent-list"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -541,11 +663,11 @@
 </footer>
 
 <script src="js/gallery.js?v=20260323b"></script>
-<script src="js/gallery-patterns.js?v=20260323b"></script>
+<script src="js/gallery-patterns.js?v=20260410e"></script>
 <script src="js/pixel-text.js?v=20260323b"></script>
 <script src="js/colors.js?v=20260323b"></script>
-<script src="js/converter.js?v=20260408b"></script>
-<script src="js/auth.js?v=20260323b"></script>
-<script src="js/app.js?v=20260408a"></script>
+<script src="js/converter.js?v=20260408c"></script>
+<script src="js/auth.js?v=20260410b"></script>
+<script src="js/app.js?v=20260410d"></script>
 </body>
 </html>

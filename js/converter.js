@@ -79,7 +79,7 @@ class BeadConverter {
     const cvs = document.createElement('canvas');
     cvs.width = gridWidth;
     cvs.height = gridHeight;
-    const ctx = cvs.getContext('2d');
+    const ctx = cvs.getContext('2d', { willReadFrequently: true });
 
     // Smooth pass: better color gradients
     ctx.imageSmoothingEnabled = true;
@@ -93,14 +93,38 @@ class BeadConverter {
     ctx.drawImage(image, 0, 0, gridWidth, gridHeight);
     const nnData = ctx.getImageData(0, 0, gridWidth, gridHeight).data;
 
-    // Merge: smooth color + NN alpha
-    const imgData = ctx.createImageData(gridWidth, gridHeight);
-    const px = imgData.data;
-    for (let j = 0; j < px.length; j += 4) {
-      px[j+3] = nnData[j+3];          // alpha from NN (sharp edges)
-      px[j]   = smData[j];            // color from smooth (better gradients)
-      px[j+1] = smData[j+1];
-      px[j+2] = smData[j+2];
+    // Build a white-matte version of the smooth pass.
+    // This preserves the visible tint of semi-transparent emoji edges without
+    // washing them out by blending with white twice.
+    const matteData = new Uint8ClampedArray(smData.length);
+    for (let j = 0; j < matteData.length; j += 4) {
+      const af = smData[j+3] / 255;
+      matteData[j]   = Math.round(smData[j]   * af + 255 * (1 - af));
+      matteData[j+1] = Math.round(smData[j+1] * af + 255 * (1 - af));
+      matteData[j+2] = Math.round(smData[j+2] * af + 255 * (1 - af));
+      matteData[j+3] = 255;
+    }
+
+    // ── Pre-cluster similar source colours (leader algorithm in Lab) ───
+    // Down-sampling introduces sub-pixel RGB drift: two regions that are
+    // visually identical (e.g. both eyes of a character) may differ by a
+    // few RGB levels.  Clustering merges them so they map to the same bead.
+    const _uniqueRgb = new Map();                 // packed-RGB → Lab
+    for (let j = 0; j < matteData.length; j += 4) {
+      const pk = (matteData[j] << 16) | (matteData[j+1] << 8) | matteData[j+2];
+      if (!_uniqueRgb.has(pk))
+        _uniqueRgb.set(pk, this.rgbToLab(matteData[j], matteData[j+1], matteData[j+2]));
+    }
+    const CLUSTER_DE = 8;                         // ΔE merge threshold
+    const _leaders = [];                          // [{lab, pk}]
+    const _clusterMap = new Map();                // packed-RGB → leader pk
+    for (const [pk, lab] of _uniqueRgb) {
+      let matched = null;
+      for (const ld of _leaders) {
+        if (this.deltaE(lab, ld.lab) < CLUSTER_DE) { matched = ld; break; }
+      }
+      if (matched) { _clusterMap.set(pk, matched.pk); }
+      else         { _leaders.push({ lab, pk }); _clusterMap.set(pk, pk); }
     }
 
     // First pass — map every pixel to nearest bead colour
@@ -111,8 +135,14 @@ class BeadConverter {
       const row = [];
       for (let x = 0; x < gridWidth; x++) {
         const i = (y * gridWidth + x) * 4;
-        if (px[i+3] < 128) { row.push(null); continue; }   // transparent → empty
-        const c = this.findNearest(px[i], px[i+1], px[i+2], palette);
+        // Use the MORE opaque of NN and smooth alpha — avoids NN sampling
+        // a single transparent edge pixel and blanking a mostly-opaque cell.
+        const effAlpha = Math.max(nnData[i+3], smData[i+3]);
+        if (effAlpha < 24) { row.push(null); continue; }   // truly transparent → empty
+        // Use clustered representative colour for matching
+        const pk = (matteData[i] << 16) | (matteData[i+1] << 8) | matteData[i+2];
+        const rk = _clusterMap.get(pk) ?? pk;
+        const c = this.findNearest((rk>>16)&0xFF, (rk>>8)&0xFF, rk&0xFF, palette);
         row.push(c);
         counts[c.code] = (counts[c.code] || 0) + 1;
       }

@@ -6,6 +6,16 @@ function trackEvent(action, params = {}) {
   }
 }
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
 /* ═══════════ Usage limiter (localStorage) ═══════════ */
 const UsageLimiter = {
   FREE_DAILY_LIMIT: 5,
@@ -83,6 +93,18 @@ class BeadPatternApp {
     this.converter = new BeadConverter();
     this.canvas    = document.getElementById('patternCanvas');
     this.ctx       = this.canvas.getContext('2d');
+    this.emptyState = document.getElementById('emptyState');
+    this.featureHighlightsBlock = document.getElementById('featureHighlightsBlock');
+    this.controls = document.querySelector('.controls');
+    this.uploadSection = document.querySelector('.upload-section');
+    this._emptyStateHome = this.emptyState ? {
+      parent: this.emptyState.parentNode,
+      nextSibling: this.emptyState.nextSibling,
+    } : null;
+    this._featureHighlightsHome = this.featureHighlightsBlock ? {
+      parent: this.featureHighlightsBlock.parentNode,
+      nextSibling: this.featureHighlightsBlock.nextSibling,
+    } : null;
     this.image     = null;       // original loaded image
     this.croppedImage = null;    // cropped version (or null = use original)
     this.pattern   = null;
@@ -122,6 +144,10 @@ class BeadPatternApp {
 
     // Comparison state
     this._comparing = false;
+    this._xhsNote = null;
+    this._restoreOriginalDataUrl = '';
+    this._restoredSource = false;
+    this._restoreBusy = false;
 
     // Edit mode state
     this.editMode = false;
@@ -130,6 +156,7 @@ class BeadPatternApp {
     this._bind();
     this._updateUsageUI();
     this._renderHistory();
+    this._syncRestoreUI();
 
     // Init auth UI
     try {
@@ -139,6 +166,52 @@ class BeadPatternApp {
       // Fallback: at least show login button
       const area = document.getElementById('userArea');
       if (area) area.innerHTML = '<button class="btn btn-sm btn-outline" onclick="location.reload()">登录 / 注册</button>';
+    }
+
+    this._syncMobileEmptyStatePlacement();
+    window.addEventListener('resize', () => this._syncMobileEmptyStatePlacement());
+  }
+
+  _setLandingShowcaseHidden(hidden) {
+    if (this.emptyState) this.emptyState.classList.toggle('hidden', hidden);
+    if (this.featureHighlightsBlock) this.featureHighlightsBlock.classList.toggle('hidden', hidden);
+  }
+
+  _syncMobileEmptyStatePlacement() {
+    if (!this.emptyState || !this.controls || !this.uploadSection || !this._emptyStateHome) return;
+
+    const isMobile = window.innerWidth <= 800;
+    if (isMobile) {
+      if (this.emptyState.parentElement !== this.controls) {
+        this.controls.insertBefore(this.emptyState, this.uploadSection);
+      }
+      this.emptyState.classList.add('empty-state-mobile');
+      if (this.featureHighlightsBlock && this.featureHighlightsBlock.parentElement !== this.controls) {
+        this.controls.appendChild(this.featureHighlightsBlock);
+      }
+      if (this.featureHighlightsBlock) this.featureHighlightsBlock.classList.add('feature-highlights-mobile');
+      return;
+    }
+
+    this.emptyState.classList.remove('empty-state-mobile');
+    if (this.featureHighlightsBlock) this.featureHighlightsBlock.classList.remove('feature-highlights-mobile');
+
+    if (this.emptyState.parentElement !== this._emptyStateHome.parent) {
+      const { parent, nextSibling } = this._emptyStateHome;
+      if (nextSibling && nextSibling.parentNode === parent) {
+        parent.insertBefore(this.emptyState, nextSibling);
+      } else {
+        parent.appendChild(this.emptyState);
+      }
+    }
+
+    if (this.featureHighlightsBlock && this._featureHighlightsHome && this.featureHighlightsBlock.parentElement !== this._featureHighlightsHome.parent) {
+      const { parent, nextSibling } = this._featureHighlightsHome;
+      if (nextSibling && nextSibling.parentNode === parent) {
+        parent.insertBefore(this.featureHighlightsBlock, nextSibling);
+      } else {
+        parent.appendChild(this.featureHighlightsBlock);
+      }
     }
   }
 
@@ -170,6 +243,21 @@ class BeadPatternApp {
     $('galleryModal').addEventListener('click', e => {
       if (e.target === $('galleryModal')) $('galleryModal').classList.add('hidden');
     });
+
+    if ($('restoreBtn')) {
+      $('restoreBtn').addEventListener('click', () => this._restoreSourceImage());
+    }
+
+    // ── Xiaohongshu import ──
+    if ($('xhsImportBtn') && $('xhsInput')) {
+      $('xhsImportBtn').addEventListener('click', () => this._importXhsNote());
+      $('xhsInput').addEventListener('keydown', e => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          e.preventDefault();
+          this._importXhsNote();
+        }
+      });
+    }
 
     // ── Sliders ──
     $('widthSlider').addEventListener('input', e => {
@@ -432,9 +520,14 @@ class BeadPatternApp {
     const cropped = new Image();
     cropped.onload = () => {
       this.croppedImage = cropped;
+      this._imageDataUrl = cropped.src;
+      this._restoreOriginalDataUrl = '';
+      this._restoredSource = false;
       document.getElementById('previewImage').src = cropped.src;
       this._refreshHeightLabel();
       this._exitCrop();
+      this._setRestoreStatus('');
+      this._syncRestoreUI();
       trackEvent('crop_applied');
     };
     cropped.src = cvs.toDataURL('image/png');
@@ -445,52 +538,282 @@ class BeadPatternApp {
   _loadImage(file) {
     const reader = new FileReader();
     reader.onload = e => {
-      const img = new Image();
-      img.onload = () => {
-        this.image = img;
-        this.croppedImage = null;   // reset crop on new image
-        this._imageDataUrl = e.target.result;   // keep for history
-        document.getElementById('previewImage').src = e.target.result;
-        document.getElementById('previewContainer').classList.remove('hidden');
-        document.getElementById('convertBtn').disabled = false;
-        this._refreshHeightLabel();
-        this._exitCrop();
-      };
-      img.src = e.target.result;
+      this._applyImageDataUrl(e.target.result).catch(() => {
+        alert('图片加载失败，请换一张图片再试');
+      });
     };
     reader.readAsDataURL(file);
   }
 
-  _loadImageFromUrl(url, name) {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      this.image = img;
-      this.croppedImage = null;
-      // Convert to data URL for preview & history
-      const cvs = document.createElement('canvas');
-      cvs.width = img.naturalWidth;
-      cvs.height = img.naturalHeight;
-      cvs.getContext('2d').drawImage(img, 0, 0);
-      this._imageDataUrl = cvs.toDataURL('image/png');
-      document.getElementById('previewImage').src = this._imageDataUrl;
-      document.getElementById('previewContainer').classList.remove('hidden');
-      document.getElementById('convertBtn').disabled = false;
-      this._refreshHeightLabel();
-      this._exitCrop();
-      trackEvent('gallery_select', { name });
-    };
-    img.onerror = () => {
-      alert('图片加载失败，请检查网络连接');
-    };
-    img.src = url;
+  _applyImageDataUrl(dataUrl, { preserveRestoreBase = false } = {}) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        this.image = img;
+        this.croppedImage = null;
+        this._imageDataUrl = dataUrl;
+        document.getElementById('previewImage').src = dataUrl;
+        document.getElementById('previewContainer').classList.remove('hidden');
+        document.getElementById('convertBtn').disabled = false;
+        this._refreshHeightLabel();
+        this._exitCrop();
+        if (!preserveRestoreBase) {
+          this._restoreOriginalDataUrl = '';
+          this._restoredSource = false;
+          this._setRestoreStatus('');
+        }
+        this._syncRestoreUI();
+        resolve();
+      };
+      img.onerror = () => reject(new Error('图片加载失败，请换一张图片再试'));
+      img.src = dataUrl;
+    });
+  }
+
+  _loadImageFromUrl(url, name, source = 'gallery') {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        // Convert to data URL for preview & history
+        const cvs = document.createElement('canvas');
+        cvs.width = img.naturalWidth;
+        cvs.height = img.naturalHeight;
+        cvs.getContext('2d').drawImage(img, 0, 0);
+        const importedDataUrl = cvs.toDataURL('image/png');
+        this._applyImageDataUrl(importedDataUrl).then(() => {
+          if (source === 'gallery') {
+            trackEvent('gallery_select', { name });
+          } else {
+            trackEvent('import_external_image', { source, name });
+          }
+          resolve();
+        }).catch(reject);
+      };
+      img.onerror = () => {
+        const error = new Error('图片加载失败，请换一张图片再试');
+        if (source === 'gallery') {
+          alert('图片加载失败，请检查网络连接');
+        }
+        reject(error);
+      };
+      img.src = url;
+    });
+  }
+
+  _getActivePreviewDataUrl() {
+    const preview = document.getElementById('previewImage');
+    if (preview && preview.src && preview.src.startsWith('data:image/')) {
+      return preview.src;
+    }
+    return this._imageDataUrl || '';
+  }
+
+  _setRestoreStatus(message, tone = 'info') {
+    const el = document.getElementById('restoreStatus');
+    if (!el) return;
+    if (!message) {
+      el.textContent = '';
+      el.className = 'restore-status hidden';
+      return;
+    }
+    el.textContent = message;
+    el.className = `restore-status restore-status-${tone}`;
+  }
+
+  _syncRestoreUI() {
+    const btn = document.getElementById('restoreBtn');
+    if (!btn) return;
+    const hasImage = !!(this.image || this.croppedImage || this._getActivePreviewDataUrl());
+    btn.disabled = this._restoreBusy || !hasImage;
+    btn.textContent = this._restoredSource && this._restoreOriginalDataUrl
+      ? '↺ 恢复导入图'
+      : '🪄 智能还原原图';
+  }
+
+  async _restoreSourceImage() {
+    if (this._restoreBusy) return;
+
+    if (this._restoredSource && this._restoreOriginalDataUrl) {
+      this._restoreBusy = true;
+      this._syncRestoreUI();
+      this._setRestoreStatus('正在恢复原导入图...', 'info');
+      try {
+        await this._applyImageDataUrl(this._restoreOriginalDataUrl);
+        this._setRestoreStatus('已恢复原导入图。', 'success');
+        trackEvent('image_restore_revert');
+      } catch (error) {
+        this._setRestoreStatus(error.message || '恢复失败，请重新导入图片', 'error');
+      } finally {
+        this._restoreBusy = false;
+        this._syncRestoreUI();
+      }
+      return;
+    }
+
+    const activeDataUrl = this._getActivePreviewDataUrl();
+    if (!activeDataUrl) {
+      this._setRestoreStatus('请先导入一张图片。', 'error');
+      return;
+    }
+
+    this._restoreBusy = true;
+    this._syncRestoreUI();
+    this._setRestoreStatus('正在智能还原原图...', 'info');
+
+    try {
+      const beadWidth = parseInt(document.getElementById('widthSlider').value, 10) || 50;
+      const response = await fetch(`${API_BASE}/api/image/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_data: activeDataUrl,
+          bead_width: beadWidth
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || data.error) {
+        throw new Error(data.error || '还原失败，请稍后再试');
+      }
+
+      const originalPreview = activeDataUrl;
+      await this._applyImageDataUrl(data.image_data, { preserveRestoreBase: true });
+      this._restoreOriginalDataUrl = originalPreview;
+      this._restoredSource = true;
+      this._syncRestoreUI();
+      this._setRestoreStatus(
+        `已还原为干净像素原图（按 ${data.grid_width} × ${data.grid_height} 采样）。接下来点“生成图案”即可。`,
+        'success'
+      );
+      trackEvent('image_restore', { width: data.grid_width, height: data.grid_height, mode: data.mode || 'local' });
+    } catch (error) {
+      this._setRestoreStatus(error.message || '还原失败，请稍后再试', 'error');
+    } finally {
+      this._restoreBusy = false;
+      this._syncRestoreUI();
+    }
+  }
+
+  _setXhsStatus(message, tone = 'info') {
+    const el = document.getElementById('xhsStatus');
+    if (!el) return;
+    if (!message) {
+      el.textContent = '';
+      el.className = 'xhs-status hidden';
+      return;
+    }
+    el.textContent = message;
+    el.className = `xhs-status xhs-status-${tone}`;
+  }
+
+  _clearXhsResult() {
+    this._xhsNote = null;
+    const result = document.getElementById('xhsImportResult');
+    const meta = document.getElementById('xhsImportMeta');
+    const grid = document.getElementById('xhsImportGrid');
+    if (result) result.classList.add('hidden');
+    if (meta) meta.innerHTML = '';
+    if (grid) grid.innerHTML = '';
+  }
+
+  async _importXhsNote() {
+    const input = document.getElementById('xhsInput');
+    const btn = document.getElementById('xhsImportBtn');
+    if (!input || !btn) return;
+
+    const rawText = input.value.trim();
+    if (!rawText) {
+      this._setXhsStatus('先粘贴小红书帖子链接或分享文案。', 'error');
+      return;
+    }
+
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '解析中...';
+    this._clearXhsResult();
+    this._setXhsStatus('正在解析帖子图片...', 'info');
+
+    try {
+      const response = await fetch(`${API_BASE}/api/import/xhs/note`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: rawText })
+      });
+      const data = await response.json();
+      if (!response.ok || data.error) {
+        throw new Error(data.error || '解析失败，请稍后再试');
+      }
+      this._xhsNote = data;
+      this._renderXhsResult(data);
+      this._setXhsStatus(`已解析到 ${data.image_count || data.images.length} 张图片，请选择包含拼豆图案的那一张。`, 'success');
+      trackEvent('xhs_note_parse', { images: data.images.length });
+    } catch (error) {
+      this._setXhsStatus(error.message || '解析失败，请稍后再试', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
+  }
+
+  _renderXhsResult(note) {
+    const result = document.getElementById('xhsImportResult');
+    const meta = document.getElementById('xhsImportMeta');
+    const grid = document.getElementById('xhsImportGrid');
+    if (!result || !meta || !grid || !note || !Array.isArray(note.images)) return;
+
+    const desc = note.description
+      ? escapeHtml(note.description)
+      : '点击下方图片即可导入；如果帖子是多图，选择那张包含拼豆图案的图片即可。';
+    meta.innerHTML = `
+      <div class="xhs-note-title">${escapeHtml(note.title || '小红书帖子')}</div>
+      <div class="xhs-note-desc">${desc}</div>
+    `;
+
+    grid.innerHTML = note.images.map((item, index) => {
+      const size = item.width && item.height ? `${item.width} x ${item.height}` : '原图尺寸';
+      return `
+        <button type="button" class="xhs-card" data-index="${index}">
+          <img src="${item.proxy_url}" alt="帖子图片 ${index + 1}" loading="lazy" crossorigin="anonymous">
+          <span class="xhs-card-badge">第 ${index + 1} 张</span>
+          <span class="xhs-card-meta">${size}</span>
+        </button>
+      `;
+    }).join('');
+
+    grid.querySelectorAll('.xhs-card').forEach(card => {
+      card.addEventListener('click', async () => {
+        const index = parseInt(card.dataset.index, 10);
+        const item = note.images[index];
+        if (!item) return;
+
+        grid.querySelectorAll('.xhs-card').forEach(el => el.classList.remove('is-importing'));
+        card.classList.add('is-importing');
+        this._setXhsStatus(`正在导入第 ${index + 1} 张图片...`, 'info');
+
+        try {
+          await this._loadImageFromUrl(
+            item.proxy_url,
+            `${note.title || '小红书帖子'}-${index + 1}`,
+            'xiaohongshu'
+          );
+          this._setXhsStatus('图片已导入。接下来直接点击“生成图案”即可还原。', 'success');
+          trackEvent('xhs_image_import', { index: index + 1 });
+        } catch (error) {
+          this._setXhsStatus(error.message || '图片导入失败，请换一张再试', 'error');
+        } finally {
+          card.classList.remove('is-importing');
+        }
+      });
+    });
+
+    result.classList.remove('hidden');
   }
 
   /* ═══════════ Gallery ═══════════ */
 
   _openGallery() {
     const modal = document.getElementById('galleryModal');
-    if (!this._galleryMode) this._galleryMode = 'emoji';
+    if (!this._galleryMode) this._galleryMode = 'sbti';
 
     // Mode switch buttons
     modal.querySelectorAll('.gallery-mode-btn').forEach(btn => {
@@ -575,15 +898,26 @@ class BeadPatternApp {
   }
 
   _getGallerySource() {
-    if (this._galleryMode === 'pattern' && typeof PATTERN_GALLERY !== 'undefined') return PATTERN_GALLERY;
+    if (typeof PATTERN_GALLERY !== 'undefined') {
+      if (this._galleryMode === 'pattern') return PATTERN_GALLERY.filter(c => c.id !== 'famous-ip' && c.id !== 'sbti-pixel');
+      if (this._galleryMode === 'famous-ip') return PATTERN_GALLERY.filter(c => c.id === 'famous-ip');
+      if (this._galleryMode === 'sbti') return PATTERN_GALLERY.filter(c => c.id === 'sbti-pixel');
+    }
     if (typeof GALLERY_DATA !== 'undefined') return GALLERY_DATA;
     return [];
+  }
+
+  _isPatternMode() {
+    return this._galleryMode === 'pattern' || this._galleryMode === 'famous-ip' || this._galleryMode === 'sbti';
   }
 
   _buildGalleryTabs() {
     const tabs = document.getElementById('galleryTabs');
     if (tabs.children.length) return;
     const source = this._getGallerySource();
+    // Hide tabs when there's only one category (e.g. famous-ip, sbti)
+    if (source.length <= 1) { tabs.classList.add('hidden'); }
+    else { tabs.classList.remove('hidden'); }
     source.forEach((cat, i) => {
       const tab = document.createElement('div');
       tab.className = 'gallery-tab' + (i === 0 ? ' active' : '');
@@ -604,17 +938,22 @@ class BeadPatternApp {
     const cat = source[catIdx];
     if (!cat) return;
 
-    if (this._galleryMode === 'pattern') {
+    if (this._isPatternMode()) {
       grid.innerHTML = cat.items.map((item, i) => {
-        const thumb = renderPatternThumb(item, 80);
-        return `<div class="gallery-item gallery-pattern-item" data-cat="${catIdx}" data-idx="${i}"><img src="${thumb}" alt="${item.name}"><span>${item.name}</span><small>${item.width}x${item.rows.length}</small></div>`;
+        const thumb = item.image ? item.image : renderPatternThumb(item, 80);
+        const cls = item.image ? 'gallery-item gallery-pattern-item gallery-illust-item' : 'gallery-item gallery-pattern-item';
+        return `<div class="${cls}" data-cat="${catIdx}" data-idx="${i}"><img src="${thumb}" alt="${item.name}"><span>${item.name}</span><small>${item.width}x${item.rows.length}</small></div>`;
       }).join('');
       grid.querySelectorAll('.gallery-item').forEach(el => {
         el.addEventListener('click', () => {
           const ci = parseInt(el.dataset.cat);
           const ii = parseInt(el.dataset.idx);
           const item = source[ci].items[ii];
-          this._loadPattern(item);
+          if (item.image) {
+            this._loadImageFromUrl(item.image, item.name);
+          } else {
+            this._loadPattern(item);
+          }
           document.getElementById('galleryModal').classList.add('hidden');
         });
       });
@@ -641,9 +980,15 @@ class BeadPatternApp {
     const brand = document.getElementById('brandSelect').value;
     const palette = BEAD_PALETTES[brand].colors;
     this.pattern = decodePattern(patternData, palette);
+    this.bgCode = this._detectBackgroundCode(this.pattern);
     this.image = null;
     this.croppedImage = null;
-    document.getElementById('emptyState').classList.add('hidden');
+    this._imageDataUrl = '';
+    this._restoreOriginalDataUrl = '';
+    this._restoredSource = false;
+    this._setRestoreStatus('');
+    this._syncRestoreUI();
+    this._setLandingShowcaseHidden(true);
     document.querySelector('.pattern-container').classList.add('has-pattern');
     this._fitAndDraw();
     this._renderLegend();
@@ -668,6 +1013,11 @@ class BeadPatternApp {
     const srcImage = this.croppedImage || this.image;
     if (!srcImage) return;
 
+    if (this.auth.needsBeans()) {
+      if (this.authUI && this.authUI.showNoBeansModal) this.authUI.showNoBeansModal(this.auth.beans);
+      return;
+    }
+
     const btn = document.getElementById('convertBtn');
     btn.textContent = '⏳ 生成中…';
     btn.disabled = true;
@@ -685,11 +1035,11 @@ class BeadPatternApp {
       const adjustedImage = this._applyAdjustments(srcImage);
       this.pattern = this.converter.convert(adjustedImage, width, palette, maxColors);
 
-      // Auto-detect background color (most common)
-      const counts = this.pattern.colorCounts;
-      this.bgCode = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+      // Auto-detect background color from the outer edge only.
+      // Using the most common color hides large single-color subjects like emoji fills.
+      this.bgCode = this._detectBackgroundCode(this.pattern);
 
-      document.getElementById('emptyState').classList.add('hidden');
+      this._setLandingShowcaseHidden(true);
       document.querySelector('.pattern-container').classList.add('has-pattern');
       this._fitAndDraw();
       this._renderLegend();
@@ -701,7 +1051,7 @@ class BeadPatternApp {
       // Start 1-min timer to prompt registration (only if not logged in)
       if (!this.auth.isLoggedIn) {
         this.auth.startPatternTimer(() => {
-          if (this.authUI) this.authUI.showAuthModal('注册即可保存作品，新用户赠送 30 个豆子', true);
+          if (this.authUI) this.authUI.showAuthModal('注册即可保存作品，新用户赠送 10 个豆子', true);
         });
       }
 
@@ -712,6 +1062,12 @@ class BeadPatternApp {
       // Consume a bean for logged-in users
       if (this.auth.isLoggedIn) {
         this.auth.consumeBean('生成拼豆图案').then(res => {
+          if (res && res.need_recharge && this.authUI && this.authUI.showNoBeansModal) {
+            this.authUI.showNoBeansModal(res.beans);
+          }
+          if (res && res.error) {
+            showToast(res.error, 'error');
+          }
           if (this.authUI) this.authUI.updateUserUI();
         });
       }
@@ -724,6 +1080,36 @@ class BeadPatternApp {
       btn.textContent = '🔄 生成图案';
       btn.disabled = false;
     });
+  }
+
+  _detectBackgroundCode(pattern) {
+    if (!pattern) return null;
+
+    const { grid, width: W, height: H } = pattern;
+    const edgeCounts = {};
+    let perimeter = 0;
+
+    const visit = (x, y) => {
+      perimeter++;
+      const c = grid[y] && grid[y][x];
+      if (!c) return;
+      edgeCounts[c.code] = (edgeCounts[c.code] || 0) + 1;
+    };
+
+    for (let x = 0; x < W; x++) {
+      visit(x, 0);
+      if (H > 1) visit(x, H - 1);
+    }
+    for (let y = 1; y < H - 1; y++) {
+      visit(0, y);
+      if (W > 1) visit(W - 1, y);
+    }
+
+    const best = Object.entries(edgeCounts).sort((a, b) => b[1] - a[1])[0];
+    if (!best || perimeter === 0) return null;
+
+    const [code, count] = best;
+    return count / perimeter >= 0.35 ? code : null;
   }
 
   _updateUsageUI() {
@@ -763,6 +1149,10 @@ class BeadPatternApp {
     ctx.save();
     ctx.translate(this.panX, this.panY);
     ctx.scale(this.zoom, this.zoom);
+
+    // Keep the board background pure white so empty cells match the final pegboard look.
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(AXIS_M, AXIS_M, W * CELL, H * CELL);
 
     // ── Cells ──
     for (let y = 0; y < H; y++) {

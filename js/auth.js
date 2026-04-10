@@ -1,14 +1,66 @@
 /* ═══════════ Auth & Bean System ═══════════ */
 
-const API_BASE = 'https://api.pindou.top';
+const API_BASE = (() => {
+  const override = localStorage.getItem('pindou_api_base');
+  if (override) return override.replace(/\/$/, '');
+
+  const { protocol, hostname } = window.location;
+  if (protocol === 'file:' || hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://127.0.0.1:8081';
+  }
+
+  return 'https://api.pindou.top';
+})();
+
+const INVITE_STORAGE_KEY = 'pindou_invite_code';
+const CLIENT_FINGERPRINT_STORAGE_KEY = 'pindou_client_fingerprint';
+
+function normalizeClientFingerprint(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 64);
+}
+
+function generateClientFingerprint() {
+  const prefix = Date.now().toString(36);
+  if (window.crypto && window.crypto.getRandomValues) {
+    const bytes = new Uint8Array(12);
+    window.crypto.getRandomValues(bytes);
+    const randomPart = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    return normalizeClientFingerprint(`${prefix}${randomPart}`);
+  }
+  return normalizeClientFingerprint(`${prefix}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`);
+}
+
+function getClientFingerprint() {
+  const stored = normalizeClientFingerprint(localStorage.getItem(CLIENT_FINGERPRINT_STORAGE_KEY));
+  if (stored && stored.length >= 16) return stored;
+  const created = generateClientFingerprint();
+  localStorage.setItem(CLIENT_FINGERPRINT_STORAGE_KEY, created);
+  return created;
+}
+
+function normalizeInviteCode(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+}
+
+function readInviteCodeFromUrl() {
+  try {
+    return normalizeInviteCode(new URLSearchParams(window.location.search).get('invite') || '');
+  } catch (e) {
+    return '';
+  }
+}
 
 class AuthManager {
   constructor() {
     this.token = localStorage.getItem('pindou_token') || '';
     this.user = JSON.parse(localStorage.getItem('pindou_user') || 'null');
+    const urlInviteCode = readInviteCodeFromUrl();
+    this.pendingInviteCode = urlInviteCode || normalizeInviteCode(localStorage.getItem(INVITE_STORAGE_KEY) || '');
+    this.landedWithInvite = !!urlInviteCode;
     this.firstGenDone = !!localStorage.getItem('pindou_first_gen');
     this._patternTimer = null;
     this._timerTriggered = false;
+    if (urlInviteCode) this.setPendingInviteCode(urlInviteCode);
   }
 
   get isLoggedIn() { return !!this.token && !!this.user; }
@@ -24,7 +76,14 @@ class AuthManager {
   _headers() {
     const h = { 'Content-Type': 'application/json' };
     if (this.token) h['Authorization'] = `Bearer ${this.token}`;
+    h['X-Client-Fingerprint'] = getClientFingerprint();
     return h;
+  }
+
+  setPendingInviteCode(code) {
+    this.pendingInviteCode = normalizeInviteCode(code);
+    if (this.pendingInviteCode) localStorage.setItem(INVITE_STORAGE_KEY, this.pendingInviteCode);
+    else localStorage.removeItem(INVITE_STORAGE_KEY);
   }
 
   async sendCode(email, purpose = 'register') {
@@ -35,10 +94,10 @@ class AuthManager {
     return r.json();
   }
 
-  async register(email, code, password) {
+  async register(email, code, password, inviteCode = '') {
     const r = await fetch(`${API_BASE}/api/auth/register`, {
       method: 'POST', headers: this._headers(),
-      body: JSON.stringify({ email, code, password })
+      body: JSON.stringify({ email, code, password, invite_code: normalizeInviteCode(inviteCode) })
     });
     const d = await r.json();
     if (d.token) {
@@ -46,6 +105,20 @@ class AuthManager {
       this.user = d.user;
       this._save();
     }
+    return d;
+  }
+
+  async validateInviteCode(code) {
+    const normalized = normalizeInviteCode(code);
+    if (!normalized) return { error: '请输入邀请码' };
+    const r = await fetch(`${API_BASE}/api/invite/validate?code=${encodeURIComponent(normalized)}`);
+    return r.json();
+  }
+
+  async getInviteInfo() {
+    const r = await fetch(`${API_BASE}/api/invite/me`, { headers: this._headers() });
+    const d = await r.json();
+    if (r.status === 401) this.logout();
     return d;
   }
 
@@ -168,6 +241,34 @@ function showToast(msg, type = 'success') {
   setTimeout(() => { t.classList.remove('show'); }, 2500);
 }
 
+async function copyText(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) { /* fall through */ }
+
+  const input = document.createElement('textarea');
+  input.value = text;
+  input.setAttribute('readonly', 'readonly');
+  input.style.position = 'fixed';
+  input.style.opacity = '0';
+  document.body.appendChild(input);
+  input.select();
+  const copied = document.execCommand('copy');
+  document.body.removeChild(input);
+  return copied;
+}
+
+function formatInviteTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).replace('T', ' ').slice(0, 16);
+  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
 function setFieldError(id, msg) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -204,6 +305,131 @@ const _emailRe = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
 // ── Auth UI ──
 function initAuthUI(authManager) {
   const $ = id => document.getElementById(id);
+  let inviteValidationToken = 0;
+  let invitePayload = null;
+
+  function setInviteHint(message, state = '') {
+    const hint = $('regInviteHint');
+    if (!hint) return;
+    hint.textContent = message || '';
+    hint.classList.toggle('is-valid', state === 'valid');
+    hint.classList.toggle('is-error', state === 'error');
+  }
+
+  async function validateInviteInput(rawValue) {
+    const inviteCode = normalizeInviteCode(rawValue);
+    authManager.setPendingInviteCode(inviteCode);
+    const regInvite = $('regInvite');
+    if (regInvite && regInvite.value !== inviteCode) regInvite.value = inviteCode;
+    clearFieldError('regInviteError');
+
+    if (!inviteCode) {
+      setInviteHint('填写邀请码可额外获得 2 个豆子；同设备或同网络邀请不计奖励');
+      return null;
+    }
+
+    const requestId = ++inviteValidationToken;
+    setInviteHint('正在验证邀请码…');
+    const res = await authManager.validateInviteCode(inviteCode);
+    if (requestId !== inviteValidationToken) return null;
+
+    if (res.valid) {
+      const note = res.anti_abuse_note ? `；${res.anti_abuse_note}` : '';
+      setInviteHint(`来自 ${res.inviter_label} 的邀请，注册可额外获得 ${res.invitee_reward} 豆${note}`, 'valid');
+      return res;
+    }
+
+    setFieldError('regInviteError', res.error || '邀请码无效');
+    setInviteHint('请输入有效的邀请码', 'error');
+    return null;
+  }
+
+  function renderInviteInfo(data) {
+    invitePayload = data || null;
+    const stats = data?.stats || {};
+    const recent = Array.isArray(data?.recent) ? data.recent : [];
+    const codeEl = $('inviteCodeValue');
+    const linkEl = $('inviteLinkInput');
+    const totalEl = $('inviteTotalCount');
+    const rewardedEl = $('inviteRewardedCount');
+    const pendingEl = $('invitePendingCount');
+    const blockedEl = $('inviteBlockedCount');
+    const beansEl = $('inviteRewardedBeans');
+    const recentEl = $('inviteRecentList');
+    const sharePreviewEl = $('inviteSharePreview');
+    const rulesEl = $('inviteRulesList');
+
+    if (codeEl) codeEl.textContent = data?.invite_code || '-';
+    if (linkEl) linkEl.value = data?.invite_link || '';
+    if (totalEl) totalEl.textContent = String(stats.total_invites || 0);
+    if (rewardedEl) rewardedEl.textContent = String(stats.rewarded_invites || 0);
+    if (pendingEl) pendingEl.textContent = String(stats.pending_invites || 0);
+    if (blockedEl) blockedEl.textContent = String(stats.blocked_invites || 0);
+    if (beansEl) beansEl.textContent = String(stats.rewarded_beans || 0);
+    if (sharePreviewEl) sharePreviewEl.textContent = data?.share_message || '';
+    if (rulesEl) {
+      const rules = Array.isArray(data?.rules) ? data.rules : [];
+      rulesEl.innerHTML = rules.map(rule => `<li>${rule}</li>`).join('');
+    }
+
+    if (!recentEl) return;
+    if (!recent.length) {
+      recentEl.innerHTML = '<div class="invite-empty">还没有邀请记录，把邀请码发给朋友试试。</div>';
+      return;
+    }
+
+    recentEl.innerHTML = recent.map(item => `
+      <div class="invite-recent-item">
+        <div class="invite-recent-main">
+          <div class="invite-recent-name">${item.invitee_label || '拼豆好友'}</div>
+          <div class="invite-recent-time">注册于 ${formatInviteTime(item.created_at)}</div>
+        </div>
+        <span class="invite-status-badge ${item.status === 'rewarded' ? 'is-rewarded' : item.status === 'blocked' ? 'is-blocked' : 'is-pending'}">${item.status === 'rewarded' ? `+${item.inviter_reward} 豆已到账` : item.status === 'blocked' ? (item.block_reason || '未计奖励') : '待首次生成'}</span>
+      </div>
+    `).join('');
+  }
+
+  function showNoBeansModal(beans = authManager.beans) {
+    const modal = $('noBeansModal');
+    if (!modal) return;
+    const countEl = $('beansCount');
+    if (countEl) countEl.textContent = String(Number.isFinite(Number(beans)) ? Number(beans) : 0);
+    modal.classList.remove('hidden');
+  }
+
+  async function showInviteModal() {
+    if (!authManager.isLoggedIn) {
+      showAuthModal('登录后即可查看邀请码并邀请好友');
+      return;
+    }
+
+    const modal = $('inviteModal');
+    const loading = $('inviteLoading');
+    const body = $('inviteBody');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+    if (loading) {
+      loading.textContent = '加载中…';
+      loading.classList.remove('hidden');
+    }
+    if (body) body.classList.add('hidden');
+
+    const res = await authManager.getInviteInfo();
+    if (res.error) {
+      if (loading) loading.textContent = res.error;
+      showToast(res.error, 'error');
+      return;
+    }
+
+    renderInviteInfo(res);
+    if (loading) loading.classList.add('hidden');
+    if (body) body.classList.remove('hidden');
+  }
+
+  function hideInviteModal() {
+    $('inviteModal')?.classList.add('hidden');
+  }
 
   // Update header user area
   function updateUserUI() {
@@ -211,11 +437,14 @@ function initAuthUI(authManager) {
     if (!area) return;
     if (authManager.isLoggedIn) {
       area.innerHTML = `
+        <button class="user-invite-btn" id="inviteTrigger" title="邀请好友注册赚豆">邀请赚豆</button>
         <span class="user-beans" title="豆子余额">🫘 ${authManager.beans}</span>
         <button class="user-recharge-btn" id="rechargeBtn" title="充值豆子">充值</button>
         <span class="user-email">${authManager.user.email.split('@')[0]}</span>
         <button class="btn-text" id="logoutBtn">退出</button>
       `;
+      const inviteBtn = $('inviteTrigger');
+      if (inviteBtn) inviteBtn.onclick = () => showInviteModal();
       const logoutBtn = $('logoutBtn');
       if (logoutBtn) logoutBtn.onclick = () => { authManager.logout(); updateUserUI(); showToast('已退出登录'); };
       const rechargeBtn = $('rechargeBtn');
@@ -241,11 +470,15 @@ function initAuthUI(authManager) {
     // Hide close button when forced
     const closeBtn = $('authModalClose');
     if (closeBtn) closeBtn.style.display = _modalForced ? 'none' : '';
-    if (message) {
-      const tip = modal.querySelector('.auth-tip');
-      if (tip) tip.textContent = message;
-    }
+    const tip = modal.querySelector('.auth-tip');
+    if (tip) tip.textContent = message || tip.dataset.defaultTip || '注册后即可获得 10 个免费豆子';
     switchTab('register');
+
+    const inviteCode = authManager.pendingInviteCode;
+    const regInvite = $('regInvite');
+    if (regInvite) regInvite.value = inviteCode;
+    if (inviteCode) validateInviteInput(inviteCode);
+    else setInviteHint('填写邀请码可额外获得 2 个豆子；同设备或同网络邀请不计奖励');
   }
 
   function hideAuthModal() {
@@ -291,6 +524,7 @@ function initAuthUI(authManager) {
   const regCode = $('regCode');
   const regPw = $('regPassword');
   const regPwConfirm = $('regPasswordConfirm');
+  const regInvite = $('regInvite');
   const loginEmail = $('loginEmail');
   const loginPw = $('loginPassword');
 
@@ -310,6 +544,17 @@ function initAuthUI(authManager) {
   if (regPwConfirm) regPwConfirm.addEventListener('input', () => {
     if (regPwConfirm.value && regPw && regPwConfirm.value !== regPw.value) setFieldError('regPasswordConfirmError', '两次密码不一致');
     else clearFieldError('regPasswordConfirmError');
+  });
+  if (regInvite) regInvite.addEventListener('input', () => {
+    const inviteCode = normalizeInviteCode(regInvite.value);
+    if (regInvite.value !== inviteCode) regInvite.value = inviteCode;
+    authManager.setPendingInviteCode(inviteCode);
+    clearFieldError('regInviteError');
+    setInviteHint(inviteCode ? '邀请码将在注册时校验' : '填写邀请码可额外获得 2 个豆子；同设备或同网络邀请不计奖励');
+  });
+  if (regInvite) regInvite.addEventListener('blur', () => {
+    if (regInvite.value) validateInviteInput(regInvite.value);
+    else setInviteHint('填写邀请码可额外获得 2 个豆子；同设备或同网络邀请不计奖励');
   });
   if (loginEmail) loginEmail.addEventListener('blur', () => {
     const v = loginEmail.value.trim();
@@ -357,6 +602,7 @@ function initAuthUI(authManager) {
       const code = regCode ? regCode.value.trim() : '';
       const pw = regPw ? regPw.value : '';
       const pwc = regPwConfirm ? regPwConfirm.value : '';
+      const inviteCode = regInvite ? normalizeInviteCode(regInvite.value) : '';
 
       // Validate
       let valid = true;
@@ -368,24 +614,32 @@ function initAuthUI(authManager) {
       else clearFieldError('regPasswordError');
       if (pw !== pwc) { setFieldError('regPasswordConfirmError', '两次密码不一致'); valid = false; }
       else clearFieldError('regPasswordConfirmError');
+      if (regInvite && regInvite.value !== inviteCode) regInvite.value = inviteCode;
+      authManager.setPendingInviteCode(inviteCode);
       if (!valid) return;
 
       const btn = regForm.querySelector('button[type=submit]');
       setSubmitLoading(btn, true, '注册中…');
-      const res = await authManager.register(email, code, pw);
+      const res = await authManager.register(email, code, pw, inviteCode);
       if (res.error) {
         setSubmitLoading(btn, false, '注册');
         // Map server error to appropriate field
         if (res.error.includes('邮箱')) setFieldError('regEmailError', res.error);
         else if (res.error.includes('验证码')) setFieldError('regCodeError', res.error);
+        else if (res.error.includes('邀请码')) setFieldError('regInviteError', res.error);
         else if (res.error.includes('密码')) setFieldError('regPasswordError', res.error);
         else showToast(res.error, 'error');
       } else {
         setSubmitLoading(btn, false, '注册');
+        authManager.setPendingInviteCode('');
+        setInviteHint('填写邀请码可额外获得 2 个豆子；同设备或同网络邀请不计奖励');
         hideAuthModal();
         _modalForced = false;
         updateUserUI();
-        showToast('🎉 注册成功！已赠送 30 个免费豆子');
+        const totalReward = Number(res.register_reward || 0) + Number(res.invitee_reward || 0);
+        let rewardText = res.invite_applied ? `🎉 注册成功！已赠送 ${totalReward} 个豆子（含邀请码奖励）` : `🎉 注册成功！已赠送 ${totalReward} 个豆子`;
+        if (res.invite_blocked_reason) rewardText += `；当前邀请未计奖励：${res.invite_blocked_reason}`;
+        showToast(rewardText);
       }
     });
   }
@@ -437,8 +691,37 @@ function initAuthUI(authManager) {
     const closeBeansBtn = $('noBeansClose');
     if (closeBeansBtn) closeBeansBtn.onclick = () => beansModal.classList.add('hidden');
     beansModal.addEventListener('click', e => { if (e.target === beansModal) beansModal.classList.add('hidden'); });
+    const inviteEarnBtn = $('inviteEarnBtn');
+    if (inviteEarnBtn) inviteEarnBtn.onclick = () => { beansModal.classList.add('hidden'); showInviteModal(); };
     const goRechargeBtn = $('goRechargeBtn');
     if (goRechargeBtn) goRechargeBtn.onclick = () => { beansModal.classList.add('hidden'); showRechargeModal(); };
+  }
+
+  // Invite modal
+  const inviteModal = $('inviteModal');
+  if (inviteModal) {
+    const closeInviteBtn = $('inviteModalClose');
+    if (closeInviteBtn) closeInviteBtn.onclick = hideInviteModal;
+    inviteModal.addEventListener('click', e => { if (e.target === inviteModal) hideInviteModal(); });
+
+    const copyCodeBtn = $('copyInviteCodeBtn');
+    if (copyCodeBtn) copyCodeBtn.addEventListener('click', async () => {
+      const ok = await copyText(invitePayload?.invite_code || '');
+      showToast(ok ? '邀请码已复制' : '复制失败，请手动复制', ok ? 'success' : 'error');
+    });
+
+    const copyLinkBtn = $('copyInviteLinkBtn');
+    if (copyLinkBtn) copyLinkBtn.addEventListener('click', async () => {
+      const ok = await copyText(invitePayload?.invite_link || '');
+      showToast(ok ? '邀请链接已复制' : '复制失败，请手动复制', ok ? 'success' : 'error');
+    });
+
+    const copyMessageBtn = $('copyInviteMessageBtn');
+    if (copyMessageBtn) copyMessageBtn.addEventListener('click', async () => {
+      const message = invitePayload ? `${invitePayload.share_message}\n${invitePayload.invite_link}` : '';
+      const ok = await copyText(message);
+      showToast(ok ? '邀请文案已复制' : '复制失败，请手动复制', ok ? 'success' : 'error');
+    });
   }
 
   // ── Recharge Modal ──
@@ -592,5 +875,5 @@ function initAuthUI(authManager) {
   try { updateUserUI(); } catch(e) { console.error('updateUserUI error:', e); }
   if (authManager.isLoggedIn) authManager.refreshUser().then(updateUserUI).catch(e => console.error('refreshUser error:', e));
 
-  return { updateUserUI, showAuthModal, hideAuthModal, showRechargeModal };
+  return { updateUserUI, showAuthModal, hideAuthModal, showRechargeModal, showInviteModal, showNoBeansModal };
 }
