@@ -47,9 +47,16 @@ SMTP_PORT = int(os.environ.get('SMTP_PORT', '465'))
 SMTP_USER = os.environ.get('SMTP_USER', '')
 SMTP_PASS = os.environ.get('SMTP_PASS', '')
 
-# 收款码图片URL（微信/支付宝个人收款码）
+# 收款码图片URL（微信/支付宝个人收款码 — fallback）
 PAY_QRCODE_WECHAT = os.environ.get('PAY_QRCODE_WECHAT', 'https://api.pindou.top/static/wechat_qr.jpg')
 PAY_QRCODE_ALIPAY = os.environ.get('PAY_QRCODE_ALIPAY', 'https://api.pindou.top/static/alipay_qr.jpg')
+
+# 虎皮椒支付配置（配置后自动启用在线支付，否则 fallback 到收款码模式）
+XUNHU_APPID = os.environ.get('XUNHU_APPID', '')
+XUNHU_APPSECRET = os.environ.get('XUNHU_APPSECRET', '')
+XUNHU_GATEWAY = os.environ.get('XUNHU_GATEWAY', 'https://api.xunhupay.com/payment/do.html')
+XUNHU_NOTIFY_URL = os.environ.get('XUNHU_NOTIFY_URL', 'https://api.pindou.top/api/pay/notify')
+XUNHU_RETURN_URL = os.environ.get('XUNHU_RETURN_URL', 'https://pindou.top/?pay_result=1')
 
 # 充值套餐
 RECHARGE_PACKAGES = {
@@ -1380,7 +1387,17 @@ def admin_adjust_beans(uid):
     db.commit()
     return jsonify({'message': 'ok', 'beans': new_beans})
 
-# ── Payment: 个人收款码 + 管理员确认 ──
+# ── Payment: 虎皮椒在线支付 / 个人收款码 fallback ──
+
+def _xunhu_sign(params):
+    """Generate xunhupay MD5 signature."""
+    filtered = {k: v for k, v in params.items() if k != 'hash' and v != ''}
+    sorted_str = '&'.join(f'{k}={filtered[k]}' for k in sorted(filtered.keys()))
+    sign_str = sorted_str + XUNHU_APPSECRET
+    return hashlib.md5(sign_str.encode('utf-8')).hexdigest()
+
+def _xunhu_enabled():
+    return bool(XUNHU_APPID and XUNHU_APPSECRET)
 
 def _gen_order_no():
     ts = datetime.now().strftime('%Y%m%d%H%M%S')
@@ -1429,12 +1446,13 @@ def pay_packages():
         'packages': pkgs,
         'qrcode_wechat': PAY_QRCODE_WECHAT,
         'qrcode_alipay': PAY_QRCODE_ALIPAY,
+        'online_pay': _xunhu_enabled(),
     })
 
 @app.route('/api/pay/create', methods=['POST'])
 @auth_required
 def pay_create():
-    """Create a pending order (user will pay via personal QR code)."""
+    """Create a pending order. If xunhupay is configured, return a payment URL."""
     data = request.get_json(silent=True) or {}
     package_id = data.get('package_id', '')
 
@@ -1454,13 +1472,52 @@ def pay_create():
     )
     db.commit()
 
-    return jsonify({
+    result = {
         'order_no': order_no,
         'amount': pkg['price'],
         'package_name': pkg['name'],
-        'qrcode_wechat': PAY_QRCODE_WECHAT,
-        'qrcode_alipay': PAY_QRCODE_ALIPAY,
-    })
+    }
+
+    # If xunhupay is enabled, create online payment
+    if _xunhu_enabled():
+        nonce_str = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
+        params = {
+            'version': '1.1',
+            'appid': XUNHU_APPID,
+            'trade_order_id': order_no,
+            'total_fee': pkg['price'],
+            'title': f'拼豆 - {pkg["name"]}',
+            'time': str(int(time.time())),
+            'notify_url': XUNHU_NOTIFY_URL,
+            'return_url': XUNHU_RETURN_URL,
+            'nonce_str': nonce_str,
+            'type': 'WAP',
+            'wap_url': 'https://pindou.top',
+            'wap_name': '拼豆图案生成器',
+        }
+        params['hash'] = _xunhu_sign(params)
+
+        try:
+            resp = requests.post(XUNHU_GATEWAY, json=params, timeout=HTTP_TIMEOUT)
+            resp_data = resp.json()
+            if resp_data.get('errcode') == 0:
+                result['pay_url'] = resp_data.get('url_qrcode') or resp_data.get('url')
+                result['online_pay'] = True
+                app.logger.info("Xunhupay order created: %s -> %s", order_no, result.get('pay_url', ''))
+            else:
+                app.logger.error("Xunhupay error: %s", resp_data)
+                # Fallback to QR code mode
+                result['qrcode_wechat'] = PAY_QRCODE_WECHAT
+                result['qrcode_alipay'] = PAY_QRCODE_ALIPAY
+        except Exception as e:
+            app.logger.error("Xunhupay request failed: %s", e)
+            result['qrcode_wechat'] = PAY_QRCODE_WECHAT
+            result['qrcode_alipay'] = PAY_QRCODE_ALIPAY
+    else:
+        result['qrcode_wechat'] = PAY_QRCODE_WECHAT
+        result['qrcode_alipay'] = PAY_QRCODE_ALIPAY
+
+    return jsonify(result)
 
 @app.route('/api/pay/status')
 @auth_required
@@ -1488,6 +1545,60 @@ def pay_orders():
         (g.user_id,)
     ).fetchall()
     return jsonify({'orders': [dict(r) for r in rows]})
+
+
+@app.route('/api/pay/notify', methods=['POST'])
+def pay_notify():
+    """Xunhupay async payment notification callback."""
+    data = request.form.to_dict() if request.form else (request.get_json(silent=True) or {})
+    app.logger.info("Pay notify received: %s", data)
+
+    if not _xunhu_enabled():
+        return 'fail'
+
+    # Verify signature
+    recv_hash = data.get('hash', '')
+    expected_hash = _xunhu_sign(data)
+    if not hmac.compare_digest(recv_hash, expected_hash):
+        app.logger.warning("Pay notify: invalid signature")
+        return 'fail'
+
+    # Check payment status
+    status = data.get('status', '')
+    if status != 'OD':  # OD = paid
+        app.logger.info("Pay notify: status=%s (not OD), ignoring", status)
+        return 'success'
+
+    order_no = data.get('trade_order_id', '')
+    if not order_no:
+        return 'fail'
+
+    db = get_db()
+    order = db.execute("SELECT * FROM orders WHERE order_no=?", (order_no,)).fetchone()
+    if not order:
+        app.logger.warning("Pay notify: order %s not found", order_no)
+        return 'fail'
+
+    if order['status'] == 'paid':
+        app.logger.info("Pay notify: order %s already paid", order_no)
+        return 'success'
+
+    # Verify amount
+    notify_fee = data.get('total_fee', '')
+    if str(order['amount']) != str(notify_fee):
+        app.logger.warning("Pay notify: amount mismatch, order=%s notify=%s", order['amount'], notify_fee)
+        return 'fail'
+
+    # Save transaction ID
+    trade_no = data.get('transaction_id', '') or data.get('open_order_id', '')
+    if trade_no:
+        db.execute("UPDATE orders SET trade_no=? WHERE id=?", (trade_no, order['id']))
+
+    # Fulfill order (add beans, update member)
+    _fulfill_order(db, order)
+    app.logger.info("Pay notify: order %s auto-fulfilled via xunhupay", order_no)
+    return 'success'
+
 
 @app.route('/api/admin/orders')
 @admin_required
@@ -1664,8 +1775,30 @@ def admin_feature_stats():
     return jsonify({
         'top_features': [dict(r) for r in top_features],
         'by_page': [dict(r) for r in by_page],
-        'daily_trend': [dict(r) for r in daily_trend]
+        'daily_trend': [dict(r) for r in daily_trend],
+        'bean_usage': _bean_usage_stats(db, days)
     })
+
+
+def _bean_usage_stats(db, days):
+    """Derive feature usage from bean_log (historical, pre-tracking)."""
+    daily = db.execute(
+        "SELECT DATE(created_at) as day, COUNT(*) as cnt, COUNT(DISTINCT user_id) as uv "
+        "FROM bean_log WHERE delta < 0 AND created_at >= DATE('now', ?) "
+        "GROUP BY day ORDER BY day",
+        (f'-{days} days',)
+    ).fetchall()
+    total = sum(r['cnt'] for r in daily)
+    uv = db.execute(
+        "SELECT COUNT(DISTINCT user_id) as uv FROM bean_log "
+        "WHERE delta < 0 AND created_at >= DATE('now', ?)",
+        (f'-{days} days',)
+    ).fetchone()['uv']
+    return {
+        'daily': [dict(r) for r in daily],
+        'total': total,
+        'uv': uv
+    }
 
 
 # ── Main ──

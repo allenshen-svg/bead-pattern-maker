@@ -816,6 +816,20 @@ function initAuthUI(authManager) {
     if (res.error) { showToast(res.error, 'error'); return; }
 
     _currentOrderNo = res.order_no;
+
+    // Online payment via xunhupay — redirect to payment page
+    if (res.pay_url && res.online_pay) {
+      window.open(res.pay_url, '_blank');
+      // Show step 3 (waiting) while user pays in new tab
+      const waitNo = $('payWaitOrderNo');
+      if (waitNo) waitNo.textContent = res.order_no;
+      showStep(3);
+      // Start polling for payment completion
+      _pollPaymentStatus(res.order_no);
+      return;
+    }
+
+    // Fallback: QR code mode
     if (res.qrcode_wechat) _qrcodeWechat = res.qrcode_wechat;
     if (res.qrcode_alipay) _qrcodeAlipay = res.qrcode_alipay;
 
@@ -845,6 +859,26 @@ function initAuthUI(authManager) {
     _currentPayMethod = 'alipay';
     updateQrImage();
     showStep(2);
+  }
+
+  // Poll payment status for online pay
+  let _pollTimer = null;
+  function _pollPaymentStatus(orderNo) {
+    if (_pollTimer) clearInterval(_pollTimer);
+    let attempts = 0;
+    _pollTimer = setInterval(async () => {
+      attempts++;
+      if (attempts > 120) { clearInterval(_pollTimer); return; } // stop after 10 min
+      try {
+        const res = await authManager.checkOrderStatus(orderNo);
+        if (res.status === 'paid') {
+          clearInterval(_pollTimer);
+          showToast('✅ 支付成功！豆子已到账', 'success');
+          hideRechargeModal();
+          authManager.refreshUser().then(updateUserUI);
+        }
+      } catch(e) {}
+    }, 5000); // check every 5s
   }
 
   // Recharge modal events
