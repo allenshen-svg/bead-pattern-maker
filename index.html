@@ -28,7 +28,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260409c">
   <link rel="manifest" href="/site.webmanifest?v=20260409c">
   <title>拼豆图案生成器 | 免费在线拼豆图纸制作工具</title>
-  <link rel="stylesheet" href="css/style.css?v=20260410e">
+  <link rel="stylesheet" href="css/style.css?v=20260410f">
   <style>@font-face { font-family: 'Zpix'; src: url('https://cdn.jsdelivr.net/gh/SolidZORO/zpix-pixel-font@master/dist/Zpix.woff2') format('woff2'); font-display: swap; }</style>
   <!-- 51.la 统计 -->
   <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
@@ -163,7 +163,7 @@
           <button id="cropApply" class="btn btn-primary" style="font-size:12px;padding:5px;flex:1">✅ 应用裁剪</button>
           <button id="cropCancel" class="btn btn-secondary" style="font-size:12px;padding:5px;flex:1">✖ 取消</button>
         </div>
-        <button id="restoreBtn" class="btn btn-secondary restore-btn">🪄 智能还原原图</button>
+        <button id="restoreBtn" class="btn btn-secondary restore-btn">🪄 像素还原</button>
         <p id="restoreStatus" class="restore-status hidden"></p>
       </div>
     </section>
@@ -396,6 +396,51 @@
         <button class="pt-preset" data-text="爱">爱</button>
         <button class="pt-preset" data-text="墨">墨</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="pixelRestoreModal" class="modal-overlay hidden">
+  <div class="pixel-restore-box">
+    <div class="pixel-restore-header">
+      <div>
+        <h2>🪄 像素图还原</h2>
+        <p>纯前端本地处理，不上传图片。先提取格子颜色，再输出像素底图或平滑插画。</p>
+      </div>
+      <button class="modal-close" id="pixelRestoreClose">&times;</button>
+    </div>
+    <div class="pixel-restore-toolbar">
+      <div class="restore-mode-group" aria-label="还原模式">
+        <button type="button" class="restore-mode-btn active" data-restore-mode="sharp">像素底图</button>
+        <button type="button" class="restore-mode-btn" data-restore-mode="smooth">平滑插画</button>
+      </div>
+      <label class="restore-scale-group" for="restoreScale">
+        输出倍率
+        <select id="restoreScale">
+          <option value="2">2x</option>
+          <option value="4" selected>4x</option>
+          <option value="8">8x</option>
+        </select>
+      </label>
+      <div id="restoreMeta" class="restore-meta"></div>
+    </div>
+    <div class="pixel-restore-grid">
+      <section class="pixel-restore-pane">
+        <h3>原图</h3>
+        <div class="pixel-restore-stage">
+          <img id="restoreOriginalImg" alt="原图预览">
+        </div>
+      </section>
+      <section class="pixel-restore-pane">
+        <h3>还原结果</h3>
+        <div class="pixel-restore-stage">
+          <canvas id="restoreResultCanvas"></canvas>
+        </div>
+      </section>
+    </div>
+    <p id="restorePanelStatus" class="restore-panel-status hidden"></p>
+    <div class="pixel-restore-actions">
+      <button id="restoreApplyBtn" class="btn btn-primary">应用结果到主图</button>
     </div>
   </div>
 </div>
@@ -633,9 +678,9 @@
       <h3>核心功能</h3>
       <ul>
         <li><strong>照片转拼豆图纸</strong> — 上传任意图片，一键生成拼豆图案</li>
-        <li><strong>30+ 素材模板</strong> — 内置小红书热门拼豆模板，包括萌宠、美食、花卉等</li>
-        <li><strong>像素文字生成</strong> — 输入文字即可生成像素风格拼豆文字图案</li>
-        <li><strong>CIE-Lab 精准配色</strong> — 科学的色彩匹配算法，确保最佳颜色还原</li>
+        <li><strong>30+ 素材模板</strong> — 内置小红书热门<a href="/templates.html">拼豆模板</a>，包括萌宠、美食、花卉等</li>
+        <li><strong><a href="/text-generator.html">像素文字生成</a></strong> — 输入文字即可生成像素风格拼豆文字图案</li>
+        <li><strong>CIE-Lab 精准配色</strong> — 科学的色彩匹配算法，确保最佳颜色还原，详见<a href="/color-cards.html">品牌色卡对比</a></li>
         <li><strong>PDF 分板导出</strong> — 大尺寸图案自动分板，打印后即可拼制</li>
         <li><strong>材料清单</strong> — 自动统计所需珠子颜色和数量</li>
       </ul>
@@ -648,6 +693,7 @@
         <li>点击"生成图案"，预览效果并调整</li>
         <li>导出 PDF 图纸或查看材料清单，开始制作</li>
       </ol>
+      <p>查看<a href="/tutorial.html">详细拼豆新手教程</a>了解更多使用技巧。</p>
     </section>
     <section class="seo-faq">
       <h3>常见问题</h3>
@@ -658,16 +704,24 @@
       <details><summary>如何在线生成拼豆图案？</summary><p>打开 pindou.top，上传一张图片或选择素材模板，设置珠子尺寸和品牌色卡，点击「生成图案」即可完成拼豆图案生成。整个过程无需注册，免费使用。</p></details>
       <details><summary>拼豆图案生成需要多长时间？</summary><p>通常几秒钟即可完成。上传图片后点击生成，系统会自动进行颜色匹配和图案转换，生成的图纸可直接导出 PDF 打印使用。</p></details>
     </section>
+    <nav style="text-align:center;margin-top:20px;margin-bottom:12px;">
+      <a href="/tutorial.html">使用教程</a> · 
+      <a href="/templates.html">素材模板</a> · 
+      <a href="/color-cards.html">品牌色卡</a> · 
+      <a href="/text-generator.html">像素文字</a>
+    </nav>
     <p class="seo-copy">&copy; 2025 pindou.top · 拼豆图案生成器 · 在线拼豆图案生成与图纸制作工具</p>
   </div>
 </footer>
 
 <script src="js/gallery.js?v=20260323b"></script>
-<script src="js/gallery-patterns.js?v=20260410e"></script>
+<script src="js/gallery-patterns.js?v=20260410h"></script>
 <script src="js/pixel-text.js?v=20260323b"></script>
+<script src="js/pixel-restore.js?v=20260410c"></script>
 <script src="js/colors.js?v=20260323b"></script>
-<script src="js/converter.js?v=20260408c"></script>
+<script src="js/converter.js?v=20260410p"></script>
 <script src="js/auth.js?v=20260410b"></script>
-<script src="js/app.js?v=20260410d"></script>
+<script src="js/app.js?v=20260410l"></script>
+<script src="js/tracker.js?v=20260412"></script>
 </body>
 </html>

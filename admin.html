@@ -32,7 +32,7 @@
     .stat-card .value { font-size: 28px; font-weight: 700; }
 
     /* Tabs */
-    .tabs { display: flex; gap: 0; margin-bottom: 16px; border: 1px solid var(--bd); border-radius: 8px; overflow: hidden; max-width: 300px; }
+    .tabs { display: flex; gap: 0; margin-bottom: 16px; border: 1px solid var(--bd); border-radius: 8px; overflow: hidden; max-width: 500px; }
     .tab-btn { flex: 1; padding: 8px 16px; border: none; background: var(--sf); cursor: pointer; font-size: 13px; font-weight: 600; color: var(--tx2); transition: .2s; }
     .tab-btn.active { background: var(--pri); color: #fff; }
 
@@ -74,6 +74,38 @@
     .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
 
     .hidden { display: none !important; }
+
+    /* Chart */
+    .chart-container { padding: 18px; }
+    .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+    .chart-header h3 { font-size: 15px; }
+    .chart-tabs { display: flex; gap: 4px; }
+    .chart-tab { padding: 4px 12px; border: 1px solid var(--bd); border-radius: 6px; background: var(--sf); cursor: pointer; font-size: 12px; }
+    .chart-tab.active { background: var(--pri); color: #fff; border-color: var(--pri); }
+    .bar-chart { display: flex; align-items: flex-end; gap: 2px; height: 180px; padding: 0 4px; overflow-x: auto; }
+    .bar-col { display: flex; flex-direction: column; align-items: center; flex: 1; min-width: 18px; max-width: 36px; }
+    .bar-col .bar { width: 100%; background: var(--pri); border-radius: 3px 3px 0 0; transition: height .3s; min-height: 1px; cursor: pointer; position: relative; }
+    .bar-col .bar:hover { background: #4f46e5; }
+    .bar-col .bar-label { font-size: 10px; color: var(--tx2); margin-top: 4px; transform: rotate(-45deg); transform-origin: top left; white-space: nowrap; height: 20px; }
+    .bar-col .bar-val { font-size: 10px; color: var(--tx); font-weight: 600; margin-bottom: 2px; }
+    .chart-summary { display: flex; gap: 20px; margin-top: 16px; flex-wrap: wrap; }
+    .chart-summary .item { font-size: 13px; color: var(--tx2); }
+    .chart-summary .item b { color: var(--tx); }
+
+    /* Feature rank */
+    .rank-list { padding: 18px; }
+    .rank-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--bd); }
+    .rank-item:last-child { border-bottom: none; }
+    .rank-num { width: 24px; height: 24px; border-radius: 50%; background: var(--bd); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--tx2); flex-shrink: 0; }
+    .rank-item:nth-child(1) .rank-num { background: #fbbf24; color: #fff; }
+    .rank-item:nth-child(2) .rank-num { background: #94a3b8; color: #fff; }
+    .rank-item:nth-child(3) .rank-num { background: #cd7f32; color: #fff; }
+    .rank-name { flex: 1; font-size: 14px; font-weight: 500; }
+    .rank-bar-wrap { flex: 2; height: 20px; background: #f1f5f9; border-radius: 10px; overflow: hidden; }
+    .rank-bar-fill { height: 100%; background: var(--pri); border-radius: 10px; transition: width .5s; }
+    .rank-count { font-size: 13px; font-weight: 600; color: var(--tx); min-width: 50px; text-align: right; }
+    .rank-uv { font-size: 11px; color: var(--tx2); min-width: 40px; text-align: right; }
+
     @media (max-width: 700px) {
       .stats { grid-template-columns: 1fr 1fr; }
       .search-input { width: 140px; }
@@ -120,6 +152,8 @@
       <button class="tab-btn active" data-tab="users" onclick="switchTab('users')">用户列表</button>
       <button class="tab-btn" data-tab="logs" onclick="switchTab('logs')">豆子日志</button>
       <button class="tab-btn" data-tab="orders" onclick="switchTab('orders')">订单管理</button>
+      <button class="tab-btn" data-tab="growth" onclick="switchTab('growth')">用户增长</button>
+      <button class="tab-btn" data-tab="features" onclick="switchTab('features')">功能统计</button>
     </div>
 
     <!-- Users panel -->
@@ -180,6 +214,46 @@
         </div>
       </div>
     </div>
+
+    <!-- Growth panel -->
+    <div id="growthPanel" class="panel hidden">
+      <div class="chart-container">
+        <div class="chart-header">
+          <h3>📈 用户增长趋势</h3>
+          <div class="chart-tabs">
+            <button class="chart-tab active" onclick="switchGrowthView('daily')">日</button>
+            <button class="chart-tab" onclick="switchGrowthView('weekly')">周</button>
+            <button class="chart-tab" onclick="switchGrowthView('monthly')">月</button>
+            <button class="chart-tab" onclick="switchGrowthView('yearly')">年</button>
+          </div>
+        </div>
+        <div id="growthChart" class="bar-chart"></div>
+        <div id="growthSummary" class="chart-summary"></div>
+      </div>
+    </div>
+
+    <!-- Features panel -->
+    <div id="featuresPanel" class="panel hidden">
+      <div class="chart-container">
+        <div class="chart-header">
+          <h3>🔥 功能点击排行</h3>
+          <div>
+            <select id="featureDays" style="padding:6px 12px;border:1px solid var(--bd);border-radius:6px;font-size:13px" onchange="loadFeatureStats()">
+              <option value="1">今天</option>
+              <option value="7" selected>近7天</option>
+              <option value="30">近30天</option>
+              <option value="90">近90天</option>
+            </select>
+          </div>
+        </div>
+        <div id="featureRank" class="rank-list"></div>
+        <div style="margin-top:16px">
+          <h4 style="font-size:14px;margin-bottom:10px;color:var(--tx2)">📄 按页面分布</h4>
+          <div id="featureByPage" class="rank-list"></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 <div id="beansModal" class="modal-bg hidden">
@@ -282,11 +356,14 @@ async function loadStats() {
 // Tab switch
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.getElementById('usersPanel').classList.toggle('hidden', tab !== 'users');
-  document.getElementById('logsPanel').classList.toggle('hidden', tab !== 'logs');
-  document.getElementById('ordersPanel').classList.toggle('hidden', tab !== 'orders');
+  ['users', 'logs', 'orders', 'growth', 'features'].forEach(t => {
+    const p = document.getElementById(t + 'Panel');
+    if (p) p.classList.toggle('hidden', t !== tab);
+  });
   if (tab === 'logs') loadLogs();
   if (tab === 'orders') loadOrders();
+  if (tab === 'growth') loadGrowth();
+  if (tab === 'features') loadFeatureStats();
 }
 
 // Users
@@ -420,6 +497,105 @@ async function cancelOrder(orderId) {
     if (d.error) alert(d.error);
     else loadOrders();
   } catch { alert('网络错误'); }
+}
+
+// ── User Growth ──
+let growthData = null;
+let growthView = 'daily';
+
+async function loadGrowth() {
+  if (growthData) { renderGrowth(); return; }
+  try {
+    const r = await fetch(`${API}/api/admin/user-growth?days=90`, { headers: headers() });
+    growthData = await r.json();
+    renderGrowth();
+  } catch {}
+}
+
+function switchGrowthView(view) {
+  growthView = view;
+  document.querySelectorAll('.chart-tab').forEach(b => b.classList.toggle('active', b.textContent === {daily:'日',weekly:'周',monthly:'月',yearly:'年'}[view]));
+  renderGrowth();
+}
+
+function renderGrowth() {
+  if (!growthData) return;
+  const container = document.getElementById('growthChart');
+  const summary = document.getElementById('growthSummary');
+  let items = [];
+
+  if (growthView === 'daily') {
+    items = growthData.daily.slice(-30).map(d => ({ label: d.day.slice(5), value: d.count, full: d.day }));
+  } else if (growthView === 'weekly') {
+    items = growthData.weekly.map(d => ({ label: d.week.slice(5), value: d.cnt, full: d.week }));
+  } else if (growthView === 'monthly') {
+    items = growthData.monthly.map(d => ({ label: d.month.slice(2), value: d.cnt, full: d.month }));
+  } else {
+    items = growthData.yearly.map(d => ({ label: d.year, value: d.cnt, full: d.year }));
+  }
+
+  const max = Math.max(1, ...items.map(i => i.value));
+  container.innerHTML = items.map(i => {
+    const h = Math.max(2, (i.value / max) * 160);
+    return `<div class="bar-col"><div class="bar-val">${i.value || ''}</div><div class="bar" style="height:${h}px" title="${i.full}: ${i.value} 人"></div><div class="bar-label">${i.label}</div></div>`;
+  }).join('');
+
+  // Summary
+  const total = items.reduce((s, i) => s + i.value, 0);
+  const avg = items.length ? (total / items.length).toFixed(1) : 0;
+  const peak = items.reduce((m, i) => i.value > m.value ? i : m, { value: 0, full: '-' });
+  summary.innerHTML = `
+    <div class="item">期间总新增: <b>${total}</b></div>
+    <div class="item">日均: <b>${avg}</b></div>
+    <div class="item">峰值: <b>${peak.value}</b> (${peak.full})</div>
+  `;
+}
+
+// ── Feature Stats ──
+async function loadFeatureStats() {
+  const days = document.getElementById('featureDays').value;
+  try {
+    const r = await fetch(`${API}/api/admin/feature-stats?days=${days}`, { headers: headers() });
+    const d = await r.json();
+    renderFeatureRank(d.top_features);
+    renderFeatureByPage(d.by_page);
+  } catch {}
+}
+
+function renderFeatureRank(features) {
+  const container = document.getElementById('featureRank');
+  if (!features || !features.length) { container.innerHTML = '<p style="color:var(--tx2);font-size:13px;padding:12px 0">暂无数据，等待前端埋点上报</p>'; return; }
+  const max = features[0].cnt;
+  container.innerHTML = features.map((f, i) => {
+    const pct = Math.max(3, (f.cnt / max) * 100);
+    return `<div class="rank-item">
+      <div class="rank-num">${i + 1}</div>
+      <div class="rank-name">${f.feature}</div>
+      <div class="rank-bar-wrap"><div class="rank-bar-fill" style="width:${pct}%"></div></div>
+      <div class="rank-count">${f.cnt} 次</div>
+      <div class="rank-uv">${f.uv} UV</div>
+    </div>`;
+  }).join('');
+}
+
+function renderFeatureByPage(byPage) {
+  const container = document.getElementById('featureByPage');
+  if (!byPage || !byPage.length) { container.innerHTML = ''; return; }
+  // Group by page
+  const pages = {};
+  byPage.forEach(r => {
+    const p = r.page || '/';
+    if (!pages[p]) pages[p] = [];
+    pages[p].push(r);
+  });
+  const pageNames = { '/': '首页', '/templates.html': '模板库', '/color-cards.html': '色卡对比', '/tutorial.html': '教程', '/text-generator.html': '文字生成' };
+  container.innerHTML = Object.entries(pages).map(([page, items]) => {
+    const name = pageNames[page] || page;
+    const total = items.reduce((s, i) => s + i.cnt, 0);
+    return `<div style="margin-bottom:12px"><div style="font-weight:600;font-size:13px;margin-bottom:4px">${name} <span style="color:var(--tx2);font-weight:400">(${total} 次)</span></div>
+    ${items.slice(0, 5).map(i => `<span class="badge badge-gray" style="margin:2px">${i.feature} ×${i.cnt}</span>`).join('')}
+    </div>`;
+  }).join('');
 }
 </script>
 </body>

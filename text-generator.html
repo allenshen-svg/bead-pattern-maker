@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="免费在线像素文字生成器 - 输入中英文文字，一键生成像素风格拼豆文字图案。支持多种字体和颜色，可直接导出为拼豆图纸制作。">
+  <meta name="keywords" content="像素文字生成器,像素字体,拼豆文字,像素艺术文字,pixel text,像素风格文字,拼豆字母,拼豆数字,像素文字在线生成,拼豆文字图案">
+  <meta property="og:title" content="像素文字生成器 - 在线生成像素风格拼豆文字 | pindou.top">
+  <meta property="og:description" content="输入文字一键生成像素风格拼豆图案，支持中英文和多种颜色，免费在线使用。">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://pindou.top/text-generator.html">
+  <meta property="og:image" content="https://pindou.top/og-image.png">
+  <meta property="og:site_name" content="拼豆图案生成器">
+  <meta property="og:locale" content="zh_CN">
+  <link rel="canonical" href="https://pindou.top/text-generator.html">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+  <meta name="theme-color" content="#6c5ce7">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico?v=20260409c">
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=20260409c">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=20260409c">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260409c">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260409c">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260409c">
+  <title>像素文字生成器 - 在线生成像素风格拼豆文字图案 | pindou.top</title>
+  <link rel="stylesheet" href="css/style.css?v=20260410f">
+  <link rel="stylesheet" href="css/pages.css?v=20260411a">
+  <style>
+    .pixel-demo { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; margin: 20px 0; }
+    .pixel-demo-item { background: var(--sf); border: 1px solid var(--bd); border-radius: var(--r); padding: 20px; text-align: center; min-width: 160px; }
+    .pixel-demo-text { font-family: 'Zpix', monospace; font-size: 24px; letter-spacing: 2px; margin-bottom: 8px; }
+    .pixel-demo-label { font-size: 12px; color: var(--tx2); }
+    .use-case-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 16px 0; }
+    .use-case-card { background: var(--sf); border: 1px solid var(--bd); border-radius: var(--r); padding: 16px; }
+    .use-case-card h4 { font-size: 14px; margin-bottom: 4px; }
+    .use-case-card p { font-size: 13px; color: var(--tx2); margin: 0; }
+    .use-case-icon { font-size: 28px; margin-bottom: 8px; }
+    @media (max-width: 600px) { .pixel-demo { gap: 10px; } .pixel-demo-item { min-width: 120px; padding: 14px; } .pixel-demo-text { font-size: 18px; } }
+  </style>
+  <style>@font-face { font-family: 'Zpix'; src: url('https://cdn.jsdelivr.net/gh/SolidZORO/zpix-pixel-font@master/dist/Zpix.woff2') format('woff2'); font-display: swap; }</style>
+  <!-- 51.la 统计 -->
+  <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
+  <script>LA.init({id:"3PMGO3CTexApBTEj",ck:"3PMGO3CTexApBTEj"})</script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "像素文字生成器",
+    "description": "输入中英文文字，一键生成像素风格拼豆文字图案",
+    "url": "https://pindou.top/text-generator.html",
+    "applicationCategory": "DesignApplication",
+    "operatingSystem": "Web Browser",
+    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "CNY"},
+    "isPartOf": {"@type": "WebSite", "name": "拼豆图案生成器", "url": "https://pindou.top"}
+  }
+  </script>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <a href="/" style="text-decoration:none;color:inherit"><h1>🎨 拼豆图案生成器</h1></a>
+  </div>
+  <p class="subtitle">上传图片，自动生成拼豆珠子图案</p>
+  <nav class="page-nav">
+    <a href="/">首页</a>
+    <a href="/tutorial.html">使用教程</a>
+    <a href="/templates.html">素材模板</a>
+    <a href="/color-cards.html">品牌色卡</a>
+    <a href="/text-generator.html" class="active">像素文字</a>
+  </nav>
+</header>
+
+<div class="breadcrumb">
+  <a href="/">首页</a><span>›</span>像素文字生成器
+</div>
+
+<div class="page-hero">
+  <h1>✏️ 像素文字生成器</h1>
+  <p>输入文字，一键生成像素风格拼豆文字图案</p>
+</div>
+
+<article class="page-content">
+
+  <h2>什么是像素文字？</h2>
+  <p>像素文字是一种用方格点阵构成的文字风格，每个笔画由一个个小方块组成，呈现出复古的 8-bit 像素艺术效果。这种风格天然适合拼豆制作——因为拼豆本身就是由一颗颗珠子排列成图案的，像素文字可以完美地映射到拼豆珠子上。</p>
+  <p><a href="/">pindou.top</a> 的像素文字功能支持中英文输入，生成的文字图案可以直接转换为拼豆图纸。你可以用它制作个性化的文字装饰、姓名牌、节日祝福等拼豆作品。</p>
+
+  <h2>效果预览</h2>
+  <div class="pixel-demo">
+    <div class="pixel-demo-item">
+      <div class="pixel-demo-text" style="color:#6366f1">HELLO</div>
+      <div class="pixel-demo-label">英文像素文字</div>
+    </div>
+    <div class="pixel-demo-item">
+      <div class="pixel-demo-text" style="color:#e11d48">拼豆</div>
+      <div class="pixel-demo-label">中文像素文字</div>
+    </div>
+    <div class="pixel-demo-item">
+      <div class="pixel-demo-text" style="color:#059669">2026</div>
+      <div class="pixel-demo-label">数字像素文字</div>
+    </div>
+    <div class="pixel-demo-item">
+      <div class="pixel-demo-text" style="color:#d97706">LOVE</div>
+      <div class="pixel-demo-label">像素文字装饰</div>
+    </div>
+  </div>
+
+  <h2>如何使用像素文字功能</h2>
+  <div class="steps">
+    <div class="step-item">
+      <h4>打开像素文字功能</h4>
+      <p>在 <a href="/">pindou.top</a> 左侧素材图库面板中，找到「像素文字」选项卡，点击即可打开文字输入界面。</p>
+    </div>
+    <div class="step-item">
+      <h4>输入文字内容</h4>
+      <p>在文字输入框中输入想要生成的文字，支持中文、英文、数字和常用符号。建议文字不要太长，3-8 个字符效果最佳。</p>
+    </div>
+    <div class="step-item">
+      <h4>选择颜色和样式</h4>
+      <p>选择文字颜色和背景颜色。可以使用纯色背景让文字更加突出，也可以选择透明背景后与图片叠加使用。</p>
+    </div>
+    <div class="step-item">
+      <h4>生成拼豆图纸</h4>
+      <p>点击生成后，像素文字会自动转换为拼豆图案。和图片生成一样，可以导出 PDF 图纸和查看材料清单。</p>
+    </div>
+  </div>
+
+  <h2>应用场景</h2>
+  <div class="use-case-grid">
+    <div class="use-case-card">
+      <div class="use-case-icon">🏠</div>
+      <h4>家居装饰</h4>
+      <p>用拼豆做一个「HOME」或「WELCOME」装饰牌挂在门口或墙上</p>
+    </div>
+    <div class="use-case-card">
+      <div class="use-case-icon">🎂</div>
+      <h4>生日礼物</h4>
+      <p>制作有朋友名字的拼豆作品作为个性化生日礼物</p>
+    </div>
+    <div class="use-case-card">
+      <div class="use-case-icon">🎄</div>
+      <h4>节日装饰</h4>
+      <p>圣诞、新年、春节用像素文字制作节日主题拼豆挂饰</p>
+    </div>
+    <div class="use-case-card">
+      <div class="use-case-icon">📱</div>
+      <h4>手机装饰</h4>
+      <p>制作个性化的像素文字手机链或手机壳装饰</p>
+    </div>
+    <div class="use-case-card">
+      <div class="use-case-icon">🏪</div>
+      <h4>店铺标识</h4>
+      <p>用拼豆制作像素风格的店名或标语，复古又有趣</p>
+    </div>
+    <div class="use-case-card">
+      <div class="use-case-icon">💌</div>
+      <h4>浪漫表白</h4>
+      <p>用拼豆拼出「I LOVE YOU」或对方的名字作为浪漫礼物</p>
+    </div>
+  </div>
+
+  <h2>关于像素字体</h2>
+  <p>pindou.top 使用的像素字体是 <strong>Zpix（最像素）</strong>，这是一款支持中英文的开源像素字体。它的特点是在小尺寸下依然保持清晰可辨，非常适合拼豆这种像素化的应用场景。英文字母和数字使用标准的 8×8 像素网格，中文字符使用 12×12 像素网格。</p>
+
+  <h3>英文和数字</h3>
+  <p>英文字母和数字是像素文字中最常用的内容。大写字母在 8 像素高度下清晰可辨，非常适合做成拼豆作品。制作一个「HELLO」文字大约需要一个 29×29 的底板就能完成。</p>
+
+  <h3>中文</h3>
+  <p>中文像素文字笔画较多，需要更大的像素网格。建议中文文字不要超过 4 个字，这样在一个底板内就能完整呈现。常见的中文像素文字作品包括名字、祝福语（如「新年快乐」）、短句等。</p>
+
+  <h2>制作技巧</h2>
+  <ul>
+    <li><strong>文字颜色要与背景形成对比</strong> — 深色文字搭配浅色背景（或反过来），确保文字清晰可辨</li>
+    <li><strong>控制文字长度</strong> — 3-6 个字符最佳，太长会导致图案过大或字体过小</li>
+    <li><strong>选择合适的尺寸</strong> — 英文 40 珠宽度左右即可，中文需要 50 珠以上</li>
+    <li><strong>利用颜色限制</strong> — 像素文字通常只需要 2-3 种颜色，设置颜色限制可以简化材料</li>
+    <li><strong>结合图案使用</strong> — 在图片生成的拼豆图案旁边添加文字，制作完整的作品</li>
+  </ul>
+
+  <div class="page-cta">
+    <h3>立即生成像素文字</h3>
+    <p>输入文字，一键转换为拼豆图纸</p>
+    <a href="/" class="btn-primary">打开像素文字生成器</a>
+  </div>
+
+  <h2>常见问题</h2>
+  <div class="page-faq">
+    <details>
+      <summary>像素文字支持哪些语言？</summary>
+      <p>目前支持中文（简体）、英文字母、数字和常用标点符号。所有这些都使用 Zpix 像素字体渲染，保证像素效果的统一性。</p>
+    </details>
+    <details>
+      <summary>像素文字可以改变颜色吗？</summary>
+      <p>可以。在生成像素文字时可以自由选择文字颜色和背景颜色，系统会自动匹配对应品牌色卡中最接近的颜色。</p>
+    </details>
+    <details>
+      <summary>生成的文字图案太大了怎么办？</summary>
+      <p>可以通过减少文字长度、缩小珠子宽度、或者选择只输入英文/数字来控制图案尺寸。中文字符比英文需要更多的珠子空间。</p>
+    </details>
+    <details>
+      <summary>可以把文字和图片合在一起吗？</summary>
+      <p>目前像素文字和图片是分开生成的。你可以分别生成文字图纸和图片图纸，在实际拼豆制作时将它们组合在一起。</p>
+    </details>
+  </div>
+</article>
+
+<footer class="seo-footer">
+  <div class="seo-footer-inner">
+    <p style="text-align:center;margin-bottom:12px;">
+      <a href="/">拼豆图案生成器</a> · 
+      <a href="/tutorial.html">使用教程</a> · 
+      <a href="/templates.html">素材模板</a> · 
+      <a href="/color-cards.html">品牌色卡</a> · 
+      <a href="/text-generator.html">像素文字</a>
+    </p>
+    <p class="seo-copy">&copy; 2025 pindou.top · 拼豆图案生成器 · 在线拼豆图案生成与图纸制作工具</p>
+  </div>
+</footer>
+
+<script src="js/tracker.js?v=20260412"></script>
+</body>
+</html>

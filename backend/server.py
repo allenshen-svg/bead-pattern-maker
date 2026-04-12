@@ -258,6 +258,17 @@ def _ensure_schema(db):
         );
         CREATE INDEX IF NOT EXISTS idx_invite_relations_inviter ON invite_relations(inviter_user_id);
         CREATE INDEX IF NOT EXISTS idx_invite_relations_status ON invite_relations(status);
+
+        CREATE TABLE IF NOT EXISTS feature_clicks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            feature TEXT NOT NULL,
+            page TEXT DEFAULT '',
+            user_id INTEGER DEFAULT 0,
+            ip TEXT DEFAULT '',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_feature_clicks_feature ON feature_clicks(feature);
+        CREATE INDEX IF NOT EXISTS idx_feature_clicks_created ON feature_clicks(created_at);
     """)
 
         if not _column_exists(db, 'users', 'invite_code'):
@@ -1529,6 +1540,133 @@ def admin_cancel_order(order_id):
     db.execute("UPDATE orders SET status='cancelled' WHERE id=?", (order_id,))
     db.commit()
     return jsonify({'message': '订单已取消'})
+
+# ── Feature click tracking (public, rate-limited) ──
+_click_rate = {}  # ip -> (count, window_start)
+
+@app.route('/api/track/click', methods=['POST'])
+def track_click():
+    """Record a feature click event."""
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+    now = time.time()
+    # Simple rate limit: max 60 clicks per minute per IP
+    bucket = _click_rate.get(ip)
+    if bucket and now - bucket[1] < 60:
+        if bucket[0] >= 60:
+            return jsonify({'ok': True})  # silently drop
+        _click_rate[ip] = (bucket[0] + 1, bucket[1])
+    else:
+        _click_rate[ip] = (1, now)
+
+    data = request.get_json(silent=True) or {}
+    feature = str(data.get('feature', '')).strip()[:100]
+    page = str(data.get('page', '')).strip()[:100]
+    if not feature:
+        return jsonify({'error': '缺少 feature'}), 400
+
+    user_id = 0
+    auth = request.headers.get('Authorization', '')
+    if auth.startswith('Bearer '):
+        try:
+            payload = jwt.decode(auth[7:], SECRET_KEY, algorithms=['HS256'])
+            user_id = payload.get('uid', 0)
+        except Exception:
+            pass
+
+    db = get_db()
+    db.execute(
+        "INSERT INTO feature_clicks (feature, page, user_id, ip, created_at) VALUES (?, ?, ?, ?, ?)",
+        (feature, page, user_id, ip, datetime.now(timezone.utc).isoformat())
+    )
+    db.commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/admin/user-growth')
+@admin_required
+def admin_user_growth():
+    """Return daily new user counts for the past N days."""
+    days = min(365, max(7, request.args.get('days', 30, type=int)))
+    db = get_db()
+    rows = db.execute(
+        "SELECT DATE(created_at) as day, COUNT(*) as cnt "
+        "FROM users WHERE created_at >= DATE('now', ?) "
+        "GROUP BY DATE(created_at) ORDER BY day",
+        (f'-{days} days',)
+    ).fetchall()
+    daily = {r['day']: r['cnt'] for r in rows}
+
+    # Fill missing days with 0
+    result = []
+    for i in range(days, -1, -1):
+        d = (datetime.now(timezone.utc) - timedelta(days=i)).strftime('%Y-%m-%d')
+        result.append({'day': d, 'count': daily.get(d, 0)})
+
+    # Weekly / Monthly / Yearly aggregates
+    weekly = db.execute(
+        "SELECT strftime('%%Y-W%%W', created_at) as week, COUNT(*) as cnt "
+        "FROM users WHERE created_at >= DATE('now', '-12 weeks') "
+        "GROUP BY week ORDER BY week"
+    ).fetchall()
+    monthly = db.execute(
+        "SELECT strftime('%%Y-%%m', created_at) as month, COUNT(*) as cnt "
+        "FROM users WHERE created_at >= DATE('now', '-12 months') "
+        "GROUP BY month ORDER BY month"
+    ).fetchall()
+    yearly = db.execute(
+        "SELECT strftime('%%Y', created_at) as year, COUNT(*) as cnt "
+        "FROM users GROUP BY year ORDER BY year"
+    ).fetchall()
+
+    return jsonify({
+        'daily': result,
+        'weekly': [dict(r) for r in weekly],
+        'monthly': [dict(r) for r in monthly],
+        'yearly': [dict(r) for r in yearly]
+    })
+
+
+@app.route('/api/admin/feature-stats')
+@admin_required
+def admin_feature_stats():
+    """Return feature click statistics."""
+    days = min(365, max(1, request.args.get('days', 7, type=int)))
+    db = get_db()
+
+    # Top features
+    top_features = db.execute(
+        "SELECT feature, COUNT(*) as cnt, COUNT(DISTINCT ip) as uv "
+        "FROM feature_clicks WHERE created_at >= DATE('now', ?) "
+        "GROUP BY feature ORDER BY cnt DESC LIMIT 50",
+        (f'-{days} days',)
+    ).fetchall()
+
+    # Top features by page
+    by_page = db.execute(
+        "SELECT page, feature, COUNT(*) as cnt "
+        "FROM feature_clicks WHERE created_at >= DATE('now', ?) "
+        "GROUP BY page, feature ORDER BY cnt DESC LIMIT 100",
+        (f'-{days} days',)
+    ).fetchall()
+
+    # Daily trend for top 5 features
+    top5 = [r['feature'] for r in top_features[:5]]
+    daily_trend = []
+    if top5:
+        placeholders = ','.join('?' * len(top5))
+        daily_trend = db.execute(
+            f"SELECT DATE(created_at) as day, feature, COUNT(*) as cnt "
+            f"FROM feature_clicks WHERE created_at >= DATE('now', ?) AND feature IN ({placeholders}) "
+            f"GROUP BY day, feature ORDER BY day",
+            (f'-{days} days', *top5)
+        ).fetchall()
+
+    return jsonify({
+        'top_features': [dict(r) for r in top_features],
+        'by_page': [dict(r) for r in by_page],
+        'daily_trend': [dict(r) for r in daily_trend]
+    })
+
 
 # ── Main ──
 if __name__ == '__main__':
