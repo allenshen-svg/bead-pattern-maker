@@ -812,6 +812,7 @@ function initAuthUI(authManager) {
 
   async function handlePackageClick(packageId) {
     showToast('正在创建订单…');
+    _lastPackageId = packageId;
     const res = await authManager.createOrder(packageId);
     if (res.error) { showToast(res.error, 'error'); return; }
 
@@ -820,11 +821,12 @@ function initAuthUI(authManager) {
     // Online payment via xunhupay — redirect to payment page
     if (res.pay_url && res.online_pay) {
       window.open(res.pay_url, '_blank');
-      // Show step 3 (waiting) while user pays in new tab
+      // Show step 3 with confirm button
+      _resetPayStep3();
       const waitNo = $('payWaitOrderNo');
       if (waitNo) waitNo.textContent = res.order_no;
       showStep(3);
-      // Start polling for payment completion
+      // Start background polling
       _pollPaymentStatus(res.order_no);
       return;
     }
@@ -868,18 +870,43 @@ function initAuthUI(authManager) {
     let attempts = 0;
     _pollTimer = setInterval(async () => {
       attempts++;
-      if (attempts > 120) { clearInterval(_pollTimer); return; } // stop after 10 min
+      if (attempts > 120) { clearInterval(_pollTimer); return; }
       try {
         const res = await authManager.checkOrderStatus(orderNo);
         if (res.status === 'paid') {
           clearInterval(_pollTimer);
-          showToast('✅ 支付成功！豆子已到账', 'success');
-          hideRechargeModal();
-          authManager.refreshUser().then(updateUserUI);
+          _showPaySuccess(res.beans);
         }
       } catch(e) {}
-    }, 5000); // check every 5s
+    }, 5000);
   }
+
+  function _showPaySuccess(beans) {
+    const pkg = (_packagesData || []).find(p => p.id === _lastPackageId);
+    const msgEl = $('paySuccessMsg');
+    if (msgEl) {
+      const name = pkg ? pkg.name : '';
+      const b = pkg ? pkg.beans : (beans || '');
+      msgEl.textContent = b ? `${b} 豆子已到账，可生成 ${b} 个图案` : '豆子已到账';
+    }
+    const waitActions = $('payWaitActions'); if (waitActions) waitActions.classList.add('hidden');
+    const waitTitle = $('payWaitTitle'); if (waitTitle) waitTitle.classList.add('hidden');
+    const waitMsg = $('payWaitMsg'); if (waitMsg) waitMsg.classList.add('hidden');
+    const waitHint = $('payWaitHint'); if (waitHint) waitHint.classList.add('hidden');
+    const successInfo = $('paySuccessInfo'); if (successInfo) successInfo.classList.remove('hidden');
+    authManager.refreshUser().then(updateUserUI);
+  }
+
+  function _resetPayStep3() {
+    const waitActions = $('payWaitActions'); if (waitActions) waitActions.classList.remove('hidden');
+    const waitTitle = $('payWaitTitle'); if (waitTitle) waitTitle.classList.remove('hidden');
+    const waitMsg = $('payWaitMsg'); if (waitMsg) waitMsg.classList.remove('hidden');
+    const waitHint = $('payWaitHint'); if (waitHint) { waitHint.classList.remove('hidden'); waitHint.textContent = ''; }
+    const successInfo = $('paySuccessInfo'); if (successInfo) successInfo.classList.add('hidden');
+    const confirmBtn = $('payConfirmBtn'); if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = '✅ 我已支付完成'; }
+  }
+
+  let _lastPackageId = '';
 
   // Recharge modal events
   const rechargeModal = $('rechargeModal');
@@ -888,13 +915,44 @@ function initAuthUI(authManager) {
     if (closeBtn) closeBtn.onclick = hideRechargeModal;
     rechargeModal.addEventListener('click', e => { if (e.target === rechargeModal) hideRechargeModal(); });
 
-    // "我已转账" button
+    // "我已转账" button (QR code mode fallback)
     const payDoneBtn = $('payDoneBtn');
     if (payDoneBtn) payDoneBtn.addEventListener('click', () => {
+      _resetPayStep3();
+      const hintEl = $('payWaitHint');
+      if (hintEl) hintEl.textContent = '管理员确认收款后，豆子将自动到账（通常5分钟内）';
       const waitNo = $('payWaitOrderNo');
       if (waitNo) waitNo.textContent = _currentOrderNo || '-';
       showStep(3);
     });
+
+    // "我已支付完成" confirm button
+    const payConfirmBtn = $('payConfirmBtn');
+    if (payConfirmBtn) payConfirmBtn.addEventListener('click', async () => {
+      if (!_currentOrderNo) return;
+      payConfirmBtn.disabled = true;
+      payConfirmBtn.textContent = '⏳ 正在查询…';
+      const hintEl = $('payWaitHint');
+      try {
+        const res = await authManager.checkOrderStatus(_currentOrderNo);
+        if (res.status === 'paid') {
+          if (_pollTimer) clearInterval(_pollTimer);
+          _showPaySuccess(res.beans);
+        } else {
+          if (hintEl) { hintEl.textContent = '暂未查询到支付结果，请稍等片刻后再试'; hintEl.style.color = '#f59e0b'; }
+          payConfirmBtn.disabled = false;
+          payConfirmBtn.textContent = '🔄 再次查询';
+        }
+      } catch (e) {
+        if (hintEl) { hintEl.textContent = '查询失败，请稍后重试'; hintEl.style.color = '#ef4444'; }
+        payConfirmBtn.disabled = false;
+        payConfirmBtn.textContent = '🔄 再次查询';
+      }
+    });
+
+    // Success page close button
+    const paySuccessCloseBtn = $('paySuccessCloseBtn');
+    if (paySuccessCloseBtn) paySuccessCloseBtn.addEventListener('click', hideRechargeModal);
 
     // Back button
     const payBackBtn = $('payBackBtn');
