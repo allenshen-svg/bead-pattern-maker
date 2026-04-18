@@ -1847,17 +1847,17 @@ def admin_user_growth():
 
     # Weekly / Monthly / Yearly aggregates
     weekly = db.execute(
-        "SELECT strftime('%%Y-W%%W', created_at, '+8 hours') as week, COUNT(*) as cnt "
+        "SELECT strftime('%Y-W%W', created_at, '+8 hours') as week, COUNT(*) as cnt "
         "FROM users WHERE created_at >= DATE('now', '-84 days', '+8 hours') "
         "GROUP BY week ORDER BY week"
     ).fetchall()
     monthly = db.execute(
-        "SELECT strftime('%%Y-%%m', created_at, '+8 hours') as month, COUNT(*) as cnt "
+        "SELECT strftime('%Y-%m', created_at, '+8 hours') as month, COUNT(*) as cnt "
         "FROM users WHERE created_at >= DATE('now', '-12 months', '+8 hours') "
         "GROUP BY month ORDER BY month"
     ).fetchall()
     yearly = db.execute(
-        "SELECT strftime('%%Y', created_at, '+8 hours') as year, COUNT(*) as cnt "
+        "SELECT strftime('%Y', created_at, '+8 hours') as year, COUNT(*) as cnt "
         "FROM users GROUP BY year ORDER BY year"
     ).fetchall()
 
