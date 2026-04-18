@@ -76,7 +76,29 @@ INVITE_CODE_LENGTH = 6
 INVITE_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 INVITE_IP_WINDOW_HOURS = 24
 INVITE_IP_REWARD_LIMIT = 2
+INVITE_DAILY_CAP = 10  # max invites rewarded per inviter per day
 CLIENT_FINGERPRINT_HEADER = 'X-Client-Fingerprint'
+
+INVITE_ACTIVATE_MIN_HOURS = 24  # invitee must be registered for >=24h
+INVITE_ACTIVATE_MIN_USES = 3    # invitee must have generated >=3 times
+INVITE_BURST_WINDOW_SEC = 3600  # 1 hour window for burst detection
+INVITE_BURST_LIMIT = 5          # auto-suspend inviter if >5 invites/hour
+REGISTER_MIN_GAP_SEC = 10       # min seconds between send-code and register
+
+# Known disposable / suspicious email domains (auto-generated spam domains)
+_BLOCKED_EMAIL_DOMAINS = {
+    'bltiwd.com', 'bwmyga.com', 'xkxkud.com', 'yzcalo.com',
+    'ruutukf.com', 'wnbaldwy.com', 'ozsaip.com', 'lnovic.com',
+    'gettranslation.app', 'animatimg.com', 'animateany.com', 'theeditai.com',
+}
+# Well-known public email providers (allowlist)
+_TRUSTED_EMAIL_DOMAINS = {
+    'qq.com', '163.com', '126.com', 'gmail.com', 'outlook.com',
+    'hotmail.com', 'icloud.com', 'foxmail.com', 'yahoo.com',
+    'yahoo.com.hk', 'sina.com', 'sohu.com', 'yeah.net',
+    'aliyun.com', 'proton.me', 'protonmail.com', 'live.com',
+    'mail.com', 'zoho.com', 'yandex.com', 'gmx.com',
+}
 CODE_EXPIRE_SEC = 300  # 5 minutes
 JWT_EXPIRE_HOURS = 168  # 7 days
 HTTP_TIMEOUT = 15
@@ -288,6 +310,10 @@ def _ensure_schema(db):
             db.execute("ALTER TABLE users ADD COLUMN register_fingerprint TEXT DEFAULT ''")
         if not _column_exists(db, 'invite_relations', 'block_reason'):
             db.execute("ALTER TABLE invite_relations ADD COLUMN block_reason TEXT DEFAULT ''")
+        if not _column_exists(db, 'users', 'banned'):
+            db.execute("ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0")
+        if not _column_exists(db, 'users', 'ban_reason'):
+            db.execute("ALTER TABLE users ADD COLUMN ban_reason TEXT DEFAULT ''")
 
         missing_rows = db.execute("SELECT id FROM users WHERE COALESCE(invite_code, '')='' ORDER BY id ASC").fetchall()
         for row in missing_rows:
@@ -336,6 +362,29 @@ def _create_token(user_id, email):
 def _validate_email(email):
     return re.match(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$', email)
 
+def _is_suspicious_email_domain(email):
+    """Block disposable/random-string email domains."""
+    domain = email.rsplit('@', 1)[-1].lower() if '@' in email else ''
+    if not domain:
+        return True
+    # Explicit blocklist
+    if domain in _BLOCKED_EMAIL_DOMAINS:
+        return True
+    # Allow trusted providers
+    if domain in _TRUSTED_EMAIL_DOMAINS:
+        return False
+    # Allow .edu / .gov / known country-level domains
+    if domain.endswith(('.edu', '.edu.cn', '.gov', '.gov.cn', '.ac.cn', '.org.cn')):
+        return False
+    # Heuristic: random-looking domain (consonant clusters, no vowels, etc.)
+    name = domain.split('.')[0]
+    if len(name) >= 5:
+        vowels = sum(1 for c in name if c in 'aeiou')
+        ratio = vowels / len(name)
+        if ratio < 0.15:  # e.g. 'bltiwd', 'xkxkud', 'bwmyga'
+            return True
+    return False
+
 def _normalize_invite_code(value):
     return re.sub(r'[^A-Z0-9]', '', (value or '').upper())[:12]
 
@@ -367,6 +416,9 @@ def _invite_block_reason_text(reason_code):
         'device_used': '当前设备已领取过邀请码奖励',
         'same_ip': '同一网络下的邀请不计奖励',
         'ip_limit': f'当前网络 {INVITE_IP_WINDOW_HOURS} 小时内的邀请码奖励次数已达上限',
+        'daily_cap': '该邀请码今日奖励次数已达上限',
+        'too_fast': '注册行为异常，邀请奖励不计',
+        'burst_detected': '邀请频率异常，奖励已暂停',
     }
     return messages.get(reason_code, '')
 
@@ -379,6 +431,18 @@ def _invite_block_reason(db, inviter_row, client_ip, client_fingerprint):
 
     if client_ip and inviter_ip and client_ip == inviter_ip:
         return 'same_ip'
+
+    # Daily cap on invites per inviter
+    today_start = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    today_invites = db.execute(
+        """
+        SELECT COUNT(*) AS c FROM invite_relations
+        WHERE inviter_user_id=? AND created_at >= ?
+        """,
+        (inviter_row['id'], today_start)
+    ).fetchone()['c']
+    if today_invites >= INVITE_DAILY_CAP:
+        return 'daily_cap'
 
     if client_fingerprint:
         used_device = db.execute(
@@ -508,28 +572,63 @@ def _restore_pixel_source(image, bead_width):
 def _activate_invite_reward(db, invitee_user_id, now):
     relation = db.execute(
         """
-        SELECT id, inviter_user_id, inviter_reward, status
+        SELECT id, inviter_user_id, inviter_reward, status, created_at
         FROM invite_relations
         WHERE invitee_user_id=?
         ORDER BY id DESC LIMIT 1
         """,
         (invitee_user_id,)
     ).fetchone()
-    if not relation or relation['status'] == 'rewarded':
+    if not relation or relation['status'] in ('rewarded', 'blocked', 'suspended'):
         return 0
 
     reward = max(0, _safe_int(relation['inviter_reward']))
+    if reward <= 0:
+        return 0
+
+    # ── Guard 1: invitee must be registered for >= INVITE_ACTIVATE_MIN_HOURS ──
+    try:
+        reg_time = datetime.fromisoformat(relation['created_at'])
+        now_dt = datetime.fromisoformat(now) if isinstance(now, str) else datetime.now(timezone.utc)
+        hours_since = (now_dt - reg_time).total_seconds() / 3600
+    except (ValueError, TypeError):
+        hours_since = 0
+    if hours_since < INVITE_ACTIVATE_MIN_HOURS:
+        return 0  # not yet eligible, will check again on next consume
+
+    # ── Guard 2: invitee must have used the tool >= INVITE_ACTIVATE_MIN_USES times ──
+    use_count = db.execute(
+        "SELECT COUNT(*) AS c FROM bean_log WHERE user_id=? AND delta < 0",
+        (invitee_user_id,)
+    ).fetchone()['c']
+    if use_count < INVITE_ACTIVATE_MIN_USES:
+        return 0  # not yet eligible
+
+    # ── Guard 3: burst detection — if inviter got too many in the last hour, auto-suspend ──
+    inviter_id = relation['inviter_user_id']
+    window_start = (datetime.now(timezone.utc) - timedelta(seconds=INVITE_BURST_WINDOW_SEC)).isoformat()
+    recent_rewarded = db.execute(
+        "SELECT COUNT(*) AS c FROM invite_relations WHERE inviter_user_id=? AND status='rewarded' AND rewarded_at >= ?",
+        (inviter_id, window_start)
+    ).fetchone()['c']
+    if recent_rewarded >= INVITE_BURST_LIMIT:
+        # Auto-suspend: block all pending invites for this inviter
+        db.execute(
+            "UPDATE invite_relations SET status='suspended', block_reason='burst_detected' "
+            "WHERE inviter_user_id=? AND status='registered'",
+            (inviter_id,)
+        )
+        return 0
+
+    # All guards passed — grant reward
     db.execute(
         "UPDATE invite_relations SET status='rewarded', activated_at=?, rewarded_at=? WHERE id=?",
         (now, now, relation['id'])
     )
-    if reward <= 0:
-        return 0
-
-    db.execute("UPDATE users SET beans = beans + ? WHERE id=?", (reward, relation['inviter_user_id']))
+    db.execute("UPDATE users SET beans = beans + ? WHERE id=?", (reward, inviter_id))
     db.execute(
         "INSERT INTO bean_log (user_id, delta, reason, created_at) VALUES (?,?,?,?)",
-        (relation['inviter_user_id'], reward, '邀请好友首次生成奖励', now)
+        (inviter_id, reward, '邀请好友首次生成奖励', now)
     )
     return reward
 
@@ -806,6 +905,11 @@ def auth_required(f):
             return jsonify({'error': '登录已过期，请重新登录'}), 401
         except jwt.InvalidTokenError:
             return jsonify({'error': '无效的登录凭证'}), 401
+        # Check ban
+        db = get_db()
+        banned = db.execute("SELECT banned FROM users WHERE id=?", (g.user_id,)).fetchone()
+        if banned and banned['banned']:
+            return jsonify({'error': '该账号已被永久封禁'}), 403
         return f(*args, **kwargs)
     return decorated
 
@@ -841,6 +945,8 @@ def send_code():
 
     if not email or not _validate_email(email):
         return jsonify({'error': '请输入有效的邮箱地址'}), 400
+    if purpose == 'register' and _is_suspicious_email_domain(email):
+        return jsonify({'error': '不支持该邮箱域名，请使用常见邮箱（QQ、163、Gmail等）'}), 400
 
     # Rate limit: 1 code per 60s per email, 5 per hour per IP
     client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
@@ -916,6 +1022,8 @@ def register():
 
     if not email or not _validate_email(email):
         return jsonify({'error': '请输入有效的邮箱地址'}), 400
+    if _is_suspicious_email_domain(email):
+        return jsonify({'error': '不支持该邮箱域名，请使用常见邮箱（QQ、163、Gmail等）'}), 400
     if not code or len(code) != 6:
         return jsonify({'error': '请输入6位验证码'}), 400
     if len(password) < 6:
@@ -949,10 +1057,15 @@ def register():
         return jsonify({'error': '请先获取验证码'}), 400
 
     created = datetime.fromisoformat(row['created_at'])
-    if (datetime.now(timezone.utc) - created).total_seconds() > CODE_EXPIRE_SEC:
+    code_age_sec = (datetime.now(timezone.utc) - created).total_seconds()
+    if code_age_sec > CODE_EXPIRE_SEC:
         return jsonify({'error': '验证码已过期，请重新获取'}), 400
     if not hmac.compare_digest(row['code'], code):
         return jsonify({'error': '验证码错误'}), 400
+
+    # Timing check: if registered too fast after code was sent, block invite reward (bot behavior)
+    if invite_code and code_age_sec < REGISTER_MIN_GAP_SEC:
+        invite_block_reason = invite_block_reason or 'too_fast'
 
     # Check if email already registered
     if db.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone():
@@ -1035,6 +1148,9 @@ def login():
 
     if not bcrypt.checkpw(password.encode(), row['password_hash'].encode()):
         return jsonify({'error': '邮箱或密码错误'}), 401
+
+    if row['banned'] if 'banned' in row.keys() else False:
+        return jsonify({'error': '该账号已被永久封禁，如有疑问请联系客服'}), 403
 
     now = _now_iso()
     db.execute("UPDATE users SET last_login=? WHERE id=?", (now, row['id']))
@@ -1228,13 +1344,14 @@ def invite_me():
         ],
         'share_message': (
             f"我在 {SITE_URL} 做拼豆图案，注册时填写邀请码 {user['invite_code']}，"
-            f"你可额外获得 {INVITEE_REGISTER_BONUS} 豆，我会在你首次生成图案后获得 {INVITER_ACTIVATE_BONUS} 豆。"
+            f"你可额外获得 {INVITEE_REGISTER_BONUS} 豆，我会在你使用 {INVITE_ACTIVATE_MIN_USES} 次后获得 {INVITER_ACTIVATE_BONUS} 豆。"
         ),
         'rules': [
             f'好友注册并填写邀请码：对方 +{INVITEE_REGISTER_BONUS} 豆',
-            f'好友首次生成图案：你 +{INVITER_ACTIVATE_BONUS} 豆',
+            f'好友注册满 {INVITE_ACTIVATE_MIN_HOURS} 小时且生成 {INVITE_ACTIVATE_MIN_USES} 次后：你 +{INVITER_ACTIVATE_BONUS} 豆',
             '同设备或同网络下的异常邀请不计奖励',
             f'同一网络 {INVITE_IP_WINDOW_HOURS} 小时内最多 {INVITE_IP_REWARD_LIMIT} 个邀请奖励名额',
+            f'每人每天最多 {INVITE_DAILY_CAP} 个邀请奖励',
         ],
     })
 
@@ -1322,12 +1439,16 @@ def admin_required(f):
 def admin_stats():
     db = get_db()
     total = db.execute("SELECT COUNT(*) as c FROM users").fetchone()['c']
-    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-    today_new = db.execute("SELECT COUNT(*) as c FROM users WHERE created_at >= ?", (today,)).fetchone()['c']
-    today_active = db.execute("SELECT COUNT(*) as c FROM users WHERE last_login >= ?", (today,)).fetchone()['c']
+    cst = timezone(timedelta(hours=8))
+    today = datetime.now(cst).strftime('%Y-%m-%dT') + '00:00:00'
+    today_utc = (datetime.now(cst).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(hours=8)).strftime('%Y-%m-%dT%H:%M:%S')
+    today_new = db.execute("SELECT COUNT(*) as c FROM users WHERE created_at >= ?", (today_utc,)).fetchone()['c']
+    today_active = db.execute("SELECT COUNT(*) as c FROM users WHERE last_login >= ?", (today_utc,)).fetchone()['c']
     total_beans_used = db.execute("SELECT COALESCE(SUM(ABS(delta)),0) as c FROM bean_log WHERE delta < 0").fetchone()['c']
     total_revenue = db.execute("SELECT COALESCE(SUM(CAST(amount AS REAL)),0) as c FROM orders WHERE status='paid'").fetchone()['c']
-    return jsonify({'total_users': total, 'today_new': today_new, 'today_active': today_active, 'total_beans_used': total_beans_used, 'total_revenue': round(total_revenue, 2)})
+    today_paid = db.execute("SELECT COUNT(*) as c, COALESCE(SUM(CAST(amount AS REAL)),0) as amt FROM orders WHERE status='paid' AND created_at >= ?", (today_utc,)).fetchone()
+    return jsonify({'total_users': total, 'today_new': today_new, 'today_active': today_active, 'total_beans_used': total_beans_used, 'total_revenue': round(total_revenue, 2),
+                    'today_paid_count': today_paid['c'], 'today_paid_amount': round(today_paid['amt'], 2)})
 
 @app.route('/api/admin/users')
 @admin_required
@@ -1460,17 +1581,26 @@ def pay_create():
         return jsonify({'error': '无效的套餐'}), 400
 
     pkg = RECHARGE_PACKAGES[package_id]
-    order_no = _gen_order_no()
     now = _now_iso()
 
     db = get_db()
-    db.execute(
-        """INSERT INTO orders (order_no, user_id, package_id, package_name, amount, beans, member_days, status, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?)""",
-        (order_no, g.user_id, package_id, pkg['name'], pkg['price'], pkg['beans'],
-         pkg.get('days', 0), 'pending', now)
-    )
-    db.commit()
+
+    # Dedup: reuse existing pending order for same user+package within 5 minutes
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    existing = db.execute(
+        "SELECT order_no FROM orders WHERE user_id=? AND package_id=? AND status='pending' AND created_at>=? ORDER BY created_at DESC LIMIT 1",
+        (g.user_id, package_id, cutoff)
+    ).fetchone()
+    order_no = existing['order_no'] if existing else _gen_order_no()
+
+    if not existing:
+        db.execute(
+            """INSERT INTO orders (order_no, user_id, package_id, package_name, amount, beans, member_days, status, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (order_no, g.user_id, package_id, pkg['name'], pkg['price'], pkg['beans'],
+             pkg.get('days', 0), 'pending', now)
+        )
+        db.commit()
 
     result = {
         'order_no': order_no,
@@ -1699,33 +1829,35 @@ def admin_user_growth():
     """Return daily new user counts for the past N days."""
     days = min(365, max(7, request.args.get('days', 30, type=int)))
     db = get_db()
+    # Use CST (UTC+8) for date grouping
     rows = db.execute(
-        "SELECT DATE(created_at) as day, COUNT(*) as cnt "
-        "FROM users WHERE created_at >= DATE('now', ?) "
-        "GROUP BY DATE(created_at) ORDER BY day",
+        "SELECT DATE(created_at, '+8 hours') as day, COUNT(*) as cnt "
+        "FROM users WHERE created_at >= DATE('now', ?, '+8 hours') "
+        "GROUP BY DATE(created_at, '+8 hours') ORDER BY day",
         (f'-{days} days',)
     ).fetchall()
     daily = {r['day']: r['cnt'] for r in rows}
 
     # Fill missing days with 0
+    cst = timezone(timedelta(hours=8))
     result = []
     for i in range(days, -1, -1):
-        d = (datetime.now(timezone.utc) - timedelta(days=i)).strftime('%Y-%m-%d')
+        d = (datetime.now(cst) - timedelta(days=i)).strftime('%Y-%m-%d')
         result.append({'day': d, 'count': daily.get(d, 0)})
 
     # Weekly / Monthly / Yearly aggregates
     weekly = db.execute(
-        "SELECT strftime('%%Y-W%%W', created_at) as week, COUNT(*) as cnt "
-        "FROM users WHERE created_at >= DATE('now', '-12 weeks') "
+        "SELECT strftime('%%Y-W%%W', created_at, '+8 hours') as week, COUNT(*) as cnt "
+        "FROM users WHERE created_at >= DATE('now', '-84 days', '+8 hours') "
         "GROUP BY week ORDER BY week"
     ).fetchall()
     monthly = db.execute(
-        "SELECT strftime('%%Y-%%m', created_at) as month, COUNT(*) as cnt "
-        "FROM users WHERE created_at >= DATE('now', '-12 months') "
+        "SELECT strftime('%%Y-%%m', created_at, '+8 hours') as month, COUNT(*) as cnt "
+        "FROM users WHERE created_at >= DATE('now', '-12 months', '+8 hours') "
         "GROUP BY month ORDER BY month"
     ).fetchall()
     yearly = db.execute(
-        "SELECT strftime('%%Y', created_at) as year, COUNT(*) as cnt "
+        "SELECT strftime('%%Y', created_at, '+8 hours') as year, COUNT(*) as cnt "
         "FROM users GROUP BY year ORDER BY year"
     ).fetchall()
 
