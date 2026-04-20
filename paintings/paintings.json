@@ -1,0 +1,72 @@
+[
+  {
+    "id": "starry_night",
+    "title": "星空 The Starry Night",
+    "artist": "梵高 Vincent van Gogh",
+    "year": "1889",
+    "file": "starry_night.jpg"
+  },
+  {
+    "id": "great_wave",
+    "title": "神奈川冲浪里 The Great Wave",
+    "artist": "葛饰北斋 Hokusai",
+    "year": "1831",
+    "file": "great_wave.jpg"
+  },
+  {
+    "id": "girl_pearl_earring",
+    "title": "戴珍珠耳环的少女 Girl with a Pearl Earring",
+    "artist": "维米尔 Johannes Vermeer",
+    "year": "1665",
+    "file": "girl_pearl_earring.jpg"
+  },
+  {
+    "id": "sunflowers",
+    "title": "向日葵 Sunflowers",
+    "artist": "梵高 Vincent van Gogh",
+    "year": "1888",
+    "file": "sunflowers.jpg"
+  },
+  {
+    "id": "the_scream",
+    "title": "呐喊 The Scream",
+    "artist": "蒙克 Edvard Munch",
+    "year": "1893",
+    "file": "the_scream.jpg"
+  },
+  {
+    "id": "water_lilies",
+    "title": "睡莲 Water Lilies",
+    "artist": "莫奈 Claude Monet",
+    "year": "1906",
+    "file": "water_lilies.jpg"
+  },
+  {
+    "id": "impression_sunrise",
+    "title": "日出·印象 Impression, Sunrise",
+    "artist": "莫奈 Claude Monet",
+    "year": "1872",
+    "file": "impression_sunrise.jpg"
+  },
+  {
+    "id": "almond_blossoms",
+    "title": "杏花 Almond Blossoms",
+    "artist": "梵高 Vincent van Gogh",
+    "year": "1890",
+    "file": "almond_blossoms.jpg"
+  },
+  {
+    "id": "cafe_terrace",
+    "title": "夜晚的咖啡馆 Café Terrace at Night",
+    "artist": "梵高 Vincent van Gogh",
+    "year": "1888",
+    "file": "cafe_terrace.jpg"
+  },
+  {
+    "id": "persistence_memory",
+    "title": "记忆的永恒 The Persistence of Memory",
+    "artist": "达利 Salvador Dalí",
+    "year": "1931",
+    "file": "persistence_memory.jpg"
+  }
+]

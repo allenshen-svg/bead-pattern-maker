@@ -1,0 +1,51 @@
+{
+  "brand": "mard",
+  "gridWidth": 50,
+  "samples": [
+    {
+      "file": "images/sbti_v2/MALO.png",
+      "label": "MALO",
+      "focus": "tiny dark eyes, skin-vs-brown separation, banana highlights"
+    },
+    {
+      "file": "images/sbti_v2/MONK.png",
+      "label": "MONK",
+      "focus": "small facial features, green text counters, light-vs-dark browns"
+    },
+    {
+      "file": "images/sbti_v2/BOSS.png",
+      "label": "BOSS",
+      "focus": "hairline details, dark eyes, muted skin tones"
+    },
+    {
+      "file": "images/sbti_v2/OJBK.png",
+      "label": "OJBK",
+      "focus": "gesture edges, bold text contrast, small dark accents"
+    },
+    {
+      "file": "images/sbti_v2/SOLO.png",
+      "label": "SOLO",
+      "focus": "dark outlines, isolated bright accents, edge preservation"
+    },
+    {
+      "file": "images/sbti_v2/LOVE-R.png",
+      "label": "LOVE-R",
+      "focus": "high-saturation reds and pinks, anti-aliased curves"
+    },
+    {
+      "file": "images/sbti_v2/CTRL.png",
+      "label": "CTRL",
+      "focus": "bold green lettering, interior holes, sharp corners"
+    },
+    {
+      "file": "images/sbti_v2/Dior-s.jpg",
+      "label": "Dior-s",
+      "focus": "jpg compression, soft gradients, photo-like skin tones"
+    },
+    {
+      "file": "images/sbti_v2/JOKE-R.jpg",
+      "label": "JOKE-R",
+      "focus": "photo gradients, fine contrast transitions, compression artifacts"
+    }
+  ]
+}

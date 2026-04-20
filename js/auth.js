@@ -449,11 +449,42 @@ function initAuthUI(authManager) {
       if (logoutBtn) logoutBtn.onclick = () => { authManager.logout(); updateUserUI(); showToast('已退出登录'); };
       const rechargeBtn = $('rechargeBtn');
       if (rechargeBtn) rechargeBtn.onclick = () => showRechargeModal();
+      // Member expiry reminder
+      _checkMemberExpiry();
     } else {
       area.innerHTML = `<button class="btn btn-sm btn-outline" id="loginTrigger">登录 / 注册</button>`;
       const trigger = $('loginTrigger');
       if (trigger) trigger.onclick = () => showAuthModal();
+      _hideMemberExpiry();
     }
+  }
+
+  function _checkMemberExpiry() {
+    const banner = $('memberExpiryBanner');
+    if (!banner) return;
+    const u = authManager.user;
+    if (!u || !u.is_member || !u.member_expire) { banner.classList.add('hidden'); return; }
+    const expire = new Date(u.member_expire + 'T23:59:59');
+    const now = new Date();
+    const daysLeft = Math.ceil((expire - now) / 86400000);
+    if (daysLeft < 0) {
+      banner.innerHTML = '👑 您的会员已过期，<a href="javascript:void(0)" id="renewLink">立即续费</a>继续享受会员权益';
+      banner.className = 'member-expiry-banner expired';
+      banner.classList.remove('hidden');
+      const link = $('renewLink'); if (link) link.onclick = () => showRechargeModal();
+    } else if (daysLeft <= 3) {
+      banner.innerHTML = `👑 您的会员还剩 <b>${daysLeft}</b> 天到期，<a href="javascript:void(0)" id="renewLink">续费</a>可延长会员时间`;
+      banner.className = 'member-expiry-banner expiring';
+      banner.classList.remove('hidden');
+      const link = $('renewLink'); if (link) link.onclick = () => showRechargeModal();
+    } else {
+      banner.classList.add('hidden');
+    }
+  }
+
+  function _hideMemberExpiry() {
+    const banner = $('memberExpiryBanner');
+    if (banner) banner.classList.add('hidden');
   }
 
   let _modalForced = false;
@@ -784,6 +815,11 @@ function initAuthUI(authManager) {
     $('rechargeStep1')?.classList.toggle('hidden', step !== 1);
     $('rechargeStep2')?.classList.toggle('hidden', step !== 2);
     $('rechargeStep3')?.classList.toggle('hidden', step !== 3);
+    // Reset step 2 modes when leaving
+    if (step !== 2) {
+      const qrMode = $('payQrMode'); if (qrMode) qrMode.classList.remove('hidden');
+      const onlineMode = $('payOnlineMode'); if (onlineMode) onlineMode.classList.add('hidden');
+    }
   }
 
   async function showRechargeModal() {
@@ -810,23 +846,46 @@ function initAuthUI(authManager) {
     if (!src) img.alt = '收款码未配置，请联系管理员';
   }
 
+  let _creatingOrder = false;
+
   async function handlePackageClick(packageId) {
+    if (_creatingOrder) return;
+    _creatingOrder = true;
     showToast('正在创建订单…');
     _lastPackageId = packageId;
+    try {
     const res = await authManager.createOrder(packageId);
-    if (res.error) { showToast(res.error, 'error'); return; }
+    if (res.error) { showToast(res.error, 'error'); _creatingOrder = false; return; }
 
     _currentOrderNo = res.order_no;
 
-    // Online payment via xunhupay — redirect to payment page
+    // Online payment via xunhupay — show QR inline in step 2
     if (res.pay_url && res.online_pay) {
-      window.open(res.pay_url, '_blank');
-      // Show step 3 with confirm button
-      _resetPayStep3();
-      const waitNo = $('payWaitOrderNo');
-      if (waitNo) waitNo.textContent = res.order_no;
-      showStep(3);
-      // Start background polling
+      // Fill order info on step 2 header
+      const nameEl = $('payPkgName'); if (nameEl) nameEl.textContent = res.package_name;
+      const amtEl = $('payAmount'); if (amtEl) amtEl.textContent = '¥' + res.amount;
+      const noEl = $('payOrderNo'); if (noEl) noEl.textContent = res.order_no;
+
+      // Show benefits summary
+      const summaryEl = $('payBenefitsSummary');
+      if (summaryEl) {
+        const pkg = (_packagesData || []).find(p => p.id === packageId);
+        if (pkg) {
+          const items = [`🫘 获得 <b>${pkg.beans}</b> 豆子（可生成 ${pkg.beans} 个图案）`];
+          if (pkg.type === 'member') {
+            items.push(`👑 解锁 <b>${pkg.days} 天</b>会员权益`);
+            items.push('⚡ 优先处理 / 💬 专属客服');
+          }
+          summaryEl.innerHTML = '<div class="pbs-title">充值后您将获得:</div>' + items.map(i => `<div class="pbs-item">${i}</div>`).join('');
+        } else { summaryEl.innerHTML = ''; }
+      }
+
+      // Hide QR mode, show online mode
+      const qrMode = $('payQrMode'); if (qrMode) qrMode.classList.add('hidden');
+      const onlineMode = $('payOnlineMode'); if (onlineMode) onlineMode.classList.remove('hidden');
+      // Load xunhupay QR page in iframe
+      const frame = $('payOnlineFrame'); if (frame) frame.src = res.pay_url;
+      showStep(2);
       _pollPaymentStatus(res.order_no);
       return;
     }
@@ -861,6 +920,7 @@ function initAuthUI(authManager) {
     _currentPayMethod = 'alipay';
     updateQrImage();
     showStep(2);
+    } finally { _creatingOrder = false; }
   }
 
   // Poll payment status for online pay
@@ -875,7 +935,9 @@ function initAuthUI(authManager) {
         const res = await authManager.checkOrderStatus(orderNo);
         if (res.status === 'paid') {
           clearInterval(_pollTimer);
+          const frame = $('payOnlineFrame'); if (frame) frame.src = 'about:blank';
           _showPaySuccess(res.beans);
+          showStep(3);
         }
       } catch(e) {}
     }, 5000);
@@ -954,9 +1016,42 @@ function initAuthUI(authManager) {
     const paySuccessCloseBtn = $('paySuccessCloseBtn');
     if (paySuccessCloseBtn) paySuccessCloseBtn.addEventListener('click', hideRechargeModal);
 
-    // Back button
+    // Back button (QR mode)
     const payBackBtn = $('payBackBtn');
     if (payBackBtn) payBackBtn.addEventListener('click', () => showStep(1));
+
+    // "我已支付完成" button (online mode)
+    const payOnlineConfirmBtn = $('payOnlineConfirmBtn');
+    if (payOnlineConfirmBtn) payOnlineConfirmBtn.addEventListener('click', async () => {
+      if (!_currentOrderNo) return;
+      payOnlineConfirmBtn.disabled = true;
+      payOnlineConfirmBtn.textContent = '⏳ 正在查询支付结果…';
+      try {
+        const res = await authManager.checkOrderStatus(_currentOrderNo);
+        if (res.status === 'paid') {
+          if (_pollTimer) clearInterval(_pollTimer);
+          const frame = $('payOnlineFrame'); if (frame) frame.src = 'about:blank';
+          _showPaySuccess(res.beans);
+          showStep(3);
+        } else {
+          payOnlineConfirmBtn.textContent = '暂未到账，请稍后再试';
+          payOnlineConfirmBtn.disabled = false;
+          setTimeout(() => { payOnlineConfirmBtn.textContent = '✅ 我已支付完成'; }, 2000);
+        }
+      } catch (e) {
+        payOnlineConfirmBtn.textContent = '查询失败，请重试';
+        payOnlineConfirmBtn.disabled = false;
+        setTimeout(() => { payOnlineConfirmBtn.textContent = '✅ 我已支付完成'; }, 2000);
+      }
+    });
+
+    // Back button (online mode)
+    const payOnlineBackBtn = $('payOnlineBackBtn');
+    if (payOnlineBackBtn) payOnlineBackBtn.addEventListener('click', () => {
+      const frame = $('payOnlineFrame'); if (frame) frame.src = 'about:blank';
+      if (_pollTimer) clearInterval(_pollTimer);
+      showStep(1);
+    });
 
     // Wait close button
     const payWaitCloseBtn = $('payWaitCloseBtn');

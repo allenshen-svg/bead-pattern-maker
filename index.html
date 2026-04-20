@@ -28,7 +28,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260409c">
   <link rel="manifest" href="/site.webmanifest?v=20260409c">
   <title>拼豆图案生成器 | 免费在线拼豆图纸制作工具</title>
-  <link rel="stylesheet" href="css/style.css?v=20260410f">
+  <link rel="stylesheet" href="css/style.css?v=20260416a">
   <style>@font-face { font-family: 'Zpix'; src: url('https://cdn.jsdelivr.net/gh/SolidZORO/zpix-pixel-font@master/dist/Zpix.woff2') format('woff2'); font-display: swap; }</style>
   <!-- 51.la 统计 -->
   <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
@@ -121,6 +121,9 @@
     <span class="hl-tag">🖼️ 素材图库</span>
   </div>
 </header>
+
+<!-- Member expiry reminder -->
+<div id="memberExpiryBanner" class="member-expiry-banner hidden"></div>
 
 <main>
   <!-- ── Left sidebar: controls ── -->
@@ -264,6 +267,7 @@
   <div class="pattern-area">
     <div class="pattern-container">
       <canvas id="patternCanvas"></canvas>
+      <button id="fullscreenBtn" class="fullscreen-btn hidden" title="全屏查看">⛶</button>
       <div class="empty-state" id="emptyState">
         <div class="landing-showcase">
           <div class="feature-showcase feature-highlights-block" id="featureHighlightsBlock">
@@ -355,9 +359,9 @@
       <button class="modal-close" id="galleryClose">&times;</button>
     </div>
     <div class="gallery-mode-switch">
-      <button class="gallery-mode-btn active" data-mode="sbti">🧠 SBTI</button>
+      <button class="gallery-mode-btn active" data-mode="pattern">🧩 拼豆图案</button>
+      <button class="gallery-mode-btn" data-mode="sbti">🧠 SBTI</button>
       <button class="gallery-mode-btn" data-mode="emoji">🎨 表情素材</button>
-      <button class="gallery-mode-btn" data-mode="pattern">🧩 拼豆图案</button>
       <button class="gallery-mode-btn" data-mode="famous-ip">🌟 动漫IP</button>
       <button class="gallery-mode-btn" data-mode="text">✒️ 像素文字</button>
     </div>
@@ -480,15 +484,30 @@
       <p class="pay-order-info">套餐: <b id="payPkgName">-</b> ｜ 金额: <b id="payAmount">-</b></p>
       <div class="pay-benefits-summary" id="payBenefitsSummary"></div>
       <p class="pay-order-no">订单号: <code id="payOrderNo">-</code></p>
-      <p class="pay-method-label">🔵 支付宝扫码支付</p>
-      <div class="pay-qr-wrap">
-        <img id="payQrImage" class="pay-qr-img" src="" alt="收款码">
-        <p class="pay-qr-hint">请扫码支付 <b id="payAmountHint">¥0</b></p>
-        <p class="pay-qr-note">⚠️ 转账时请备注订单号: <code id="payOrderNoNote">-</code></p>
+      <!-- QR code mode (fallback) -->
+      <div id="payQrMode">
+        <p class="pay-method-label">🔵 支付宝扫码支付</p>
+        <div class="pay-qr-wrap">
+          <img id="payQrImage" class="pay-qr-img" src="" alt="收款码">
+          <p class="pay-qr-hint">请扫码支付 <b id="payAmountHint">¥0</b></p>
+          <p class="pay-qr-note">⚠️ 转账时请备注订单号: <code id="payOrderNoNote">-</code></p>
+        </div>
+        <div class="pay-actions">
+          <button class="btn btn-primary" id="payDoneBtn">✅ 我已转账</button>
+          <button class="btn btn-secondary" id="payBackBtn">← 返回</button>
+        </div>
       </div>
-      <div class="pay-actions">
-        <button class="btn btn-primary" id="payDoneBtn">✅ 我已转账</button>
-        <button class="btn btn-secondary" id="payBackBtn">← 返回</button>
+      <!-- Online pay mode (xunhupay) -->
+      <div id="payOnlineMode" class="hidden">
+        <p style="text-align:center;color:#64748b;font-size:14px;margin:8px 0">请用<b style="color:#22c55e">微信</b>扫描下方二维码完成支付</p>
+        <div style="display:flex;justify-content:center;margin:12px 0">
+          <iframe id="payOnlineFrame" style="width:280px;height:300px;border:none;border-radius:12px;overflow:hidden" src="about:blank"></iframe>
+        </div>
+        <p style="text-align:center;color:#f59e0b;font-size:13px;margin-bottom:12px">⚠️ 支付完成前请勿关闭此页面</p>
+        <div class="pay-actions">
+          <button class="btn btn-primary" id="payOnlineConfirmBtn" style="width:100%">✅ 我已支付完成</button>
+          <button class="btn btn-secondary" id="payOnlineBackBtn" style="width:100%;margin-top:6px">← 返回选择套餐</button>
+        </div>
       </div>
     </div>
     <!-- Step 3: Waiting -->
@@ -724,13 +743,21 @@
 </footer>
 
 <script src="js/gallery.js?v=20260323b"></script>
-<script src="js/gallery-patterns.js?v=20260410h"></script>
+<script src="js/gallery-patterns.js?v=20260416a"></script>
 <script src="js/pixel-text.js?v=20260323b"></script>
 <script src="js/pixel-restore.js?v=20260410c"></script>
 <script src="js/colors.js?v=20260323b"></script>
 <script src="js/converter.js?v=20260410p"></script>
-<script src="js/auth.js?v=20260410b"></script>
-<script src="js/app.js?v=20260410l"></script>
+<style>
+.member-expiry-banner { padding: 10px 20px; text-align: center; font-size: 14px; line-height: 1.5; }
+.member-expiry-banner.expiring { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; }
+.member-expiry-banner.expired { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #991b1b; }
+.member-expiry-banner a { color: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.member-expiry-banner a:hover { opacity: .8; }
+.member-expiry-banner.hidden { display: none; }
+</style>
+<script src="js/auth.js?v=20260414a"></script>
+<script src="js/app.js?v=20260416a"></script>
 <script src="js/tracker.js?v=20260412"></script>
 </body>
 </html>

@@ -108,6 +108,7 @@ class BeadPatternApp {
     this.image     = null;       // original loaded image
     this.croppedImage = null;    // cropped version (or null = use original)
     this.pattern   = null;
+    this._galleryTitlePattern = null;
     this.isPro     = true;     // 全功能免费版
 
     // Auth system
@@ -148,6 +149,11 @@ class BeadPatternApp {
     this._restoreOriginalDataUrl = '';
     this._restoredSource = false;
     this._restoreBusy = false;
+    this._restoreMode = 'sharp';
+    this._restoreScale = 4;
+    this._restorePreviewDataUrl = '';
+    this._restorePreviewMeta = null;
+    this._restoreRenderToken = 0;
 
     // Edit mode state
     this.editMode = false;
@@ -247,6 +253,29 @@ class BeadPatternApp {
     if ($('restoreBtn')) {
       $('restoreBtn').addEventListener('click', () => this._restoreSourceImage());
     }
+    if ($('pixelRestoreClose') && $('pixelRestoreModal')) {
+      $('pixelRestoreClose').addEventListener('click', () => this._closeRestoreModal());
+      $('pixelRestoreModal').addEventListener('click', e => {
+        if (e.target === $('pixelRestoreModal')) this._closeRestoreModal();
+      });
+    }
+    document.querySelectorAll('[data-restore-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this._restoreMode = btn.dataset.restoreMode || 'sharp';
+        this._syncRestorePanelControls();
+        this._renderRestorePreview();
+      });
+    });
+    if ($('restoreScale')) {
+      $('restoreScale').addEventListener('change', e => {
+        this._restoreScale = parseInt(e.target.value, 10) || 4;
+        this._syncRestorePanelControls();
+        this._renderRestorePreview();
+      });
+    }
+    if ($('restoreApplyBtn')) {
+      $('restoreApplyBtn').addEventListener('click', () => this._applyRestorePreview());
+    }
 
     // ── Xiaohongshu import ──
     if ($('xhsImportBtn') && $('xhsInput')) {
@@ -305,6 +334,17 @@ class BeadPatternApp {
 
     // ── Comparison toggle ──
     $('compareBtn').addEventListener('click', () => this._toggleCompare());
+
+    // ── Fullscreen ──
+    $('fullscreenBtn').addEventListener('click', () => this._toggleFullscreen());
+    document.addEventListener('fullscreenchange', () => this._onFullscreenChange());
+    document.addEventListener('webkitfullscreenchange', () => this._onFullscreenChange());
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && document.querySelector('.pattern-container.fake-fullscreen')) {
+        e.preventDefault();
+        this._toggleFullscreen();
+      }
+    });
 
     // ── Toggles ──
     $('showCodes').addEventListener('change', e => { this.showCodes = e.target.checked; this._draw(); });
@@ -523,6 +563,7 @@ class BeadPatternApp {
       this._imageDataUrl = cropped.src;
       this._restoreOriginalDataUrl = '';
       this._restoredSource = false;
+      this._resetRestorePreviewState();
       document.getElementById('previewImage').src = cropped.src;
       this._refreshHeightLabel();
       this._exitCrop();
@@ -536,6 +577,7 @@ class BeadPatternApp {
   /* ═══════════ Image loading ═══════════ */
 
   _loadImage(file) {
+    this._galleryTitlePattern = null;
     const reader = new FileReader();
     reader.onload = e => {
       this._applyImageDataUrl(e.target.result).catch(() => {
@@ -543,6 +585,23 @@ class BeadPatternApp {
       });
     };
     reader.readAsDataURL(file);
+  }
+
+  _resetRestorePreviewState() {
+    this._restorePreviewDataUrl = '';
+    this._restorePreviewMeta = null;
+    this._restoreRenderToken += 1;
+
+    const canvas = document.getElementById('restoreResultCanvas');
+    if (canvas) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+
+    const meta = document.getElementById('restoreMeta');
+    if (meta) meta.textContent = '';
+
+    this._setRestorePanelStatus('');
   }
 
   _applyImageDataUrl(dataUrl, { preserveRestoreBase = false } = {}) {
@@ -555,6 +614,7 @@ class BeadPatternApp {
         document.getElementById('previewImage').src = dataUrl;
         document.getElementById('previewContainer').classList.remove('hidden');
         document.getElementById('convertBtn').disabled = false;
+        this._resetRestorePreviewState();
         this._refreshHeightLabel();
         this._exitCrop();
         if (!preserveRestoreBase) {
@@ -570,7 +630,7 @@ class BeadPatternApp {
     });
   }
 
-  _loadImageFromUrl(url, name, source = 'gallery') {
+  _loadImageFromUrl(url, name, source = 'gallery', galleryTemplate = null) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -581,6 +641,9 @@ class BeadPatternApp {
         cvs.height = img.naturalHeight;
         cvs.getContext('2d').drawImage(img, 0, 0);
         const importedDataUrl = cvs.toDataURL('image/png');
+        this._galleryTitlePattern = galleryTemplate && (galleryTemplate.rows || galleryTemplate.titleOverlayText)
+          ? galleryTemplate
+          : null;
         this._applyImageDataUrl(importedDataUrl).then(() => {
           if (source === 'gallery') {
             trackEvent('gallery_select', { name });
@@ -609,6 +672,646 @@ class BeadPatternApp {
     return this._imageDataUrl || '';
   }
 
+  _getSbtiTitleTemplate() {
+    const meta = this._galleryTitlePattern;
+    if (!meta || !meta.image || !meta.rows || !meta.width) return null;
+    if (meta.titleOverlayMode === 'source' || meta.titleOverlayMode === 'text-dual' || meta.titleOverlayMode === 'pixel-template') return null;
+    return meta.image.includes('images/sbti_v2/') ? meta : null;
+  }
+
+  _pickSbtiTitleColor(srcImage, palette) {
+    const preparedPalette = this.converter.preparePalette(palette);
+    const cvs = document.createElement('canvas');
+    cvs.width = srcImage.naturalWidth || srcImage.width;
+    cvs.height = srcImage.naturalHeight || srcImage.height;
+    const ctx = cvs.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(srcImage, 0, 0, cvs.width, cvs.height);
+    const sampleHeight = Math.max(1, Math.round(cvs.height * 0.22));
+    const data = ctx.getImageData(0, 0, cvs.width, sampleHeight).data;
+
+    let rSum = 0, gSum = 0, bSum = 0, count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const alpha = data[i+3];
+      if (alpha < 24) continue;
+      const r = data[i], g = data[i+1], b = data[i+2];
+      if (g >= r + 10 && g >= b + 10 && (255 - r) + (255 - g) + (255 - b) > 20) {
+        rSum += r;
+        gSum += g;
+        bSum += b;
+        count++;
+      }
+    }
+
+    if (!count) {
+      return this.converter.findNearest(104, 159, 56, preparedPalette);
+    }
+
+    return this.converter.findNearest(
+      Math.round(rSum / count),
+      Math.round(gSum / count),
+      Math.round(bSum / count),
+      preparedPalette,
+    );
+  }
+
+  _pickSbtiTitleBackground(palette) {
+    const preparedPalette = this.converter.preparePalette(palette);
+    return this.converter.findNearest(255, 255, 255, preparedPalette);
+  }
+
+  _generateSbtiPixelTextPattern(textConfig, colorCode) {
+    if (
+      !textConfig ||
+      !textConfig.text ||
+      !textConfig.fontSize ||
+      typeof PixelTextGenerator === 'undefined' ||
+      !PixelTextGenerator.generate
+    ) {
+      return null;
+    }
+
+    return PixelTextGenerator.generate(textConfig.text, textConfig.fontSize, colorCode, '.');
+  }
+
+  _applySbtiPixelTemplateOverlay(srcImage, palette, meta) {
+    if (!this.pattern || !meta || !meta.rows || !meta.width || !meta.titlePixelText) return;
+
+    const overlay = this._extractSbtiSourceTitleOverlay(srcImage);
+    if (!overlay || !overlay.lines || overlay.lines.length < 2) return;
+
+    const preparedPalette = this.converter.preparePalette(palette);
+    const bgColor = this._pickSbtiTitleBackground(palette);
+    const chineseColor = this.converter.findNearest(
+      overlay.lines[0].rgb[0],
+      overlay.lines[0].rgb[1],
+      overlay.lines[0].rgb[2],
+      preparedPalette,
+    );
+    const englishColor = this._pickSbtiTitleColor(srcImage, palette);
+    const chinesePattern = this._generateSbtiPixelTextPattern(meta.titlePixelText, chineseColor.code);
+    if (!chinesePattern || !chinesePattern.rows.length) return;
+
+    const chineseWidth = chinesePattern.width;
+    const chineseHeight = chinesePattern.rows.length;
+    const englishWidth = meta.width;
+    const englishHeight = meta.rows.length;
+    const gap = meta.titleOverlayGap ?? 1;
+    const chineseStartX = Math.max(0, Math.round((this.pattern.width - chineseWidth) / 2));
+    const chineseStartY = Math.max(1, meta.titlePixelText.startY ?? 1);
+    const englishStartX = Math.max(0, Math.round((this.pattern.width - englishWidth) / 2));
+    const englishStartY = Math.max(chineseStartY + chineseHeight + gap, meta.englishStartY ?? 0);
+
+    const clearMinX = Math.max(0, Math.min(chineseStartX, englishStartX) - 1);
+    const clearMaxX = Math.min(
+      this.pattern.width - 1,
+      Math.max(chineseStartX + chineseWidth - 1, englishStartX + englishWidth - 1) + 1,
+    );
+    const clearMinY = Math.max(0, chineseStartY - 1);
+    const clearMaxY = Math.min(
+      this.pattern.height - 1,
+      Math.max(chineseStartY + chineseHeight - 1, englishStartY + englishHeight - 1) + 1,
+    );
+
+    for (let y = clearMinY; y <= clearMaxY; y++) {
+      for (let x = clearMinX; x <= clearMaxX; x++) {
+        this.pattern.grid[y][x] = bgColor;
+      }
+    }
+
+    chinesePattern.rows.forEach((rowStr, rowIndex) => {
+      const y = chineseStartY + rowIndex;
+      if (y < 0 || y >= this.pattern.height) return;
+      rowStr.split(',').forEach((token, colIndex) => {
+        if (token === '.' || !token) return;
+        const x = chineseStartX + colIndex;
+        if (x < 0 || x >= this.pattern.width) return;
+        this.pattern.grid[y][x] = chineseColor;
+      });
+    });
+
+    meta.rows.forEach((rowStr, rowIndex) => {
+      const y = englishStartY + rowIndex;
+      if (y < 0 || y >= this.pattern.height) return;
+      rowStr.split(',').forEach((token, colIndex) => {
+        if (token === '.' || !token) return;
+        const x = englishStartX + colIndex;
+        if (x < 0 || x >= this.pattern.width) return;
+        this.pattern.grid[y][x] = englishColor;
+      });
+    });
+
+    this._recountPattern();
+  }
+
+  _renderSbtiTextMask(textConfig) {
+    if (!textConfig || !textConfig.text || !textConfig.width || !textConfig.height || !textConfig.font) {
+      return null;
+    }
+
+    const source = document.createElement('canvas');
+    source.width = 640;
+    source.height = 280;
+    const ctx = source.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, source.width, source.height);
+    ctx.fillStyle = '#111';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = textConfig.font;
+    ctx.fillText(textConfig.text, source.width / 2, source.height / 2);
+
+    const data = ctx.getImageData(0, 0, source.width, source.height).data;
+    let minX = source.width;
+    let minY = source.height;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < source.height; y++) {
+      for (let x = 0; x < source.width; x++) {
+        const index = (y * source.width + x) * 4;
+        if (255 - data[index] <= 40) continue;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      }
+    }
+
+    if (maxX < minX || maxY < minY) return null;
+
+    const boxWidth = maxX - minX + 1;
+    const boxHeight = maxY - minY + 1;
+    const threshold = textConfig.threshold ?? 0.3;
+    const mask = [];
+
+    for (let gridY = 0; gridY < textConfig.height; gridY++) {
+      const y0 = minY + gridY * boxHeight / textConfig.height;
+      const y1 = minY + (gridY + 1) * boxHeight / textConfig.height;
+      const row = [];
+
+      for (let gridX = 0; gridX < textConfig.width; gridX++) {
+        const x0 = minX + gridX * boxWidth / textConfig.width;
+        const x1 = minX + (gridX + 1) * boxWidth / textConfig.width;
+        let inkSamples = 0;
+        let totalSamples = 0;
+
+        for (let sy = 0; sy < 10; sy++) {
+          const fy = y0 + (sy + 0.5) * (y1 - y0) / 10;
+          const py = Math.min(source.height - 1, Math.max(0, Math.floor(fy)));
+          for (let sx = 0; sx < 10; sx++) {
+            const fx = x0 + (sx + 0.5) * (x1 - x0) / 10;
+            const px = Math.min(source.width - 1, Math.max(0, Math.floor(fx)));
+            const index = (py * source.width + px) * 4;
+            totalSamples += 1;
+            if (255 - data[index] > 40) inkSamples += 1;
+          }
+        }
+
+        row.push(totalSamples > 0 && inkSamples / totalSamples >= threshold);
+      }
+
+      mask.push(row);
+    }
+
+    return mask;
+  }
+
+  _applySbtiTextTitleOverlay(srcImage, palette, meta) {
+    if (!this.pattern || !meta || !Array.isArray(meta.titleOverlayText) || !meta.titleOverlayText.length) return;
+
+    const overlay = this._extractSbtiSourceTitleOverlay(srcImage);
+    if (!overlay || !overlay.lines || overlay.lines.length < meta.titleOverlayText.length) return;
+
+    const preparedPalette = this.converter.preparePalette(palette);
+    const bgColor = this._pickSbtiTitleBackground(palette);
+    const renderedLines = meta.titleOverlayText.map((lineMeta, index) => {
+      const mask = this._renderSbtiTextMask(lineMeta);
+      if (!mask) return null;
+      return {
+        mask,
+        width: lineMeta.width,
+        height: lineMeta.height,
+        color: this.converter.findNearest(
+          overlay.lines[index].rgb[0],
+          overlay.lines[index].rgb[1],
+          overlay.lines[index].rgb[2],
+          preparedPalette,
+        ),
+      };
+    });
+
+    if (renderedLines.some(line => !line)) return;
+
+    const gap = meta.titleOverlayGap ?? 2;
+    const totalHeight = renderedLines.reduce((sum, line) => sum + line.height, 0) + gap * Math.max(0, renderedLines.length - 1);
+    let titleStartY = Math.max(
+      1,
+      Math.round((((overlay.minY + overlay.maxY) / 2) * this.pattern.height / overlay.sourceHeight) - totalHeight / 2),
+    );
+    if (titleStartY + totalHeight >= this.pattern.height) {
+      titleStartY = Math.max(1, this.pattern.height - totalHeight - 1);
+    }
+
+    const centerX = ((overlay.minX + overlay.maxX + 1) / 2) * this.pattern.width / overlay.sourceWidth;
+    const placements = [];
+    let cursorY = titleStartY;
+    for (const line of renderedLines) {
+      const maxStartX = Math.max(0, this.pattern.width - line.width);
+      let startX = Math.round(centerX - line.width / 2);
+      startX = Math.max(0, Math.min(maxStartX, startX));
+      placements.push({ startX, startY: cursorY });
+      cursorY += line.height + gap;
+    }
+
+    let clearMinX = this.pattern.width;
+    let clearMaxX = -1;
+    let clearMinY = this.pattern.height;
+    let clearMaxY = -1;
+    placements.forEach((placement, index) => {
+      const line = renderedLines[index];
+      clearMinX = Math.min(clearMinX, placement.startX - 1);
+      clearMaxX = Math.max(clearMaxX, placement.startX + line.width);
+      clearMinY = Math.min(clearMinY, placement.startY - 1);
+      clearMaxY = Math.max(clearMaxY, placement.startY + line.height);
+    });
+
+    clearMinX = Math.max(0, clearMinX);
+    clearMaxX = Math.min(this.pattern.width - 1, clearMaxX);
+    clearMinY = Math.max(0, clearMinY);
+    clearMaxY = Math.min(this.pattern.height - 1, clearMaxY);
+
+    for (let y = clearMinY; y <= clearMaxY; y++) {
+      for (let x = clearMinX; x <= clearMaxX; x++) {
+        this.pattern.grid[y][x] = bgColor;
+      }
+    }
+
+    renderedLines.forEach((line, index) => {
+      const placement = placements[index];
+      line.mask.forEach((row, rowIndex) => {
+        row.forEach((enabled, colIndex) => {
+          if (!enabled) return;
+          this.pattern.grid[placement.startY + rowIndex][placement.startX + colIndex] = line.color;
+        });
+      });
+    });
+
+    this._recountPattern();
+  }
+
+  _extractSbtiSourceTitleOverlay(srcImage) {
+    const sourceWidth = srcImage.naturalWidth || srcImage.width;
+    const sourceHeight = srcImage.naturalHeight || srcImage.height;
+    if (!sourceWidth || !sourceHeight) return null;
+
+    const cvs = document.createElement('canvas');
+    cvs.width = sourceWidth;
+    cvs.height = sourceHeight;
+    const ctx = cvs.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(srcImage, 0, 0, sourceWidth, sourceHeight);
+
+    const scanHeight = Math.max(1, Math.round(sourceHeight * 0.38));
+    const imageData = ctx.getImageData(0, 0, sourceWidth, scanHeight).data;
+    const rowCounts = new Array(scanHeight).fill(0);
+    const isNearWhite = (rgb) => {
+      const max = Math.max(rgb[0], rgb[1], rgb[2]);
+      const min = Math.min(rgb[0], rgb[1], rgb[2]);
+      return max >= 242 && (max - min) <= 12;
+    };
+
+    for (let y = 0; y < scanHeight; y++) {
+      for (let x = 0; x < sourceWidth; x++) {
+        const index = (y * sourceWidth + x) * 4;
+        const alpha = imageData[index + 3];
+        if (alpha < 24) continue;
+        const rgb = this.converter.matteToWhite(
+          imageData[index],
+          imageData[index + 1],
+          imageData[index + 2],
+          alpha,
+        );
+        if (isNearWhite(rgb)) continue;
+        rowCounts[y] += 1;
+      }
+    }
+
+    const rowGroups = [];
+    for (let y = 0; y < scanHeight; y++) {
+      if (rowCounts[y] === 0) continue;
+      const prev = rowGroups[rowGroups.length - 1];
+      if (prev && y <= prev.maxY + 2) {
+        prev.maxY = y;
+        prev.total += rowCounts[y];
+      } else {
+        rowGroups.push({ minY: y, maxY: y, total: rowCounts[y] });
+      }
+    }
+
+    const titleGroup = rowGroups.find(group => group.total >= 500 && (group.maxY - group.minY) >= 12) || null;
+    if (!titleGroup) return null;
+
+    const colCounts = new Array(sourceWidth).fill(0);
+    for (let y = titleGroup.minY; y <= titleGroup.maxY; y++) {
+      for (let x = 0; x < sourceWidth; x++) {
+        const index = (y * sourceWidth + x) * 4;
+        const alpha = imageData[index + 3];
+        if (alpha < 24) continue;
+        const rgb = this.converter.matteToWhite(
+          imageData[index],
+          imageData[index + 1],
+          imageData[index + 2],
+          alpha,
+        );
+        if (isNearWhite(rgb)) continue;
+        colCounts[x] += 1;
+      }
+    }
+
+    let minX = sourceWidth;
+    let maxX = -1;
+    for (let x = 0; x < sourceWidth; x++) {
+      if (colCounts[x] > 0) {
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+      }
+    }
+    if (maxX < minX) return null;
+
+    let centerTop = titleGroup.minY + (titleGroup.maxY - titleGroup.minY) * 0.3;
+    let centerBottom = titleGroup.minY + (titleGroup.maxY - titleGroup.minY) * 0.72;
+    for (let iteration = 0; iteration < 8; iteration++) {
+      let sumTop = 0, weightTop = 0, sumBottom = 0, weightBottom = 0;
+      for (let y = titleGroup.minY; y <= titleGroup.maxY; y++) {
+        const weight = rowCounts[y];
+        if (!weight) continue;
+        if (Math.abs(y - centerTop) <= Math.abs(y - centerBottom)) {
+          sumTop += y * weight;
+          weightTop += weight;
+        } else {
+          sumBottom += y * weight;
+          weightBottom += weight;
+        }
+      }
+      if (weightTop) centerTop = sumTop / weightTop;
+      if (weightBottom) centerBottom = sumBottom / weightBottom;
+    }
+
+    if (centerTop > centerBottom) {
+      const tmp = centerTop;
+      centerTop = centerBottom;
+      centerBottom = tmp;
+    }
+    const splitY = Math.round((centerTop + centerBottom) / 2);
+
+    const buildLineBox = (lineMinY, lineMaxY) => {
+      let boxMinX = sourceWidth;
+      let boxMaxX = -1;
+      let boxMinY = lineMaxY;
+      let boxMaxY = lineMinY - 1;
+      const color = { r: 0, g: 0, b: 0, count: 0 };
+
+      for (let y = lineMinY; y <= lineMaxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+          const index = (y * sourceWidth + x) * 4;
+          const alpha = imageData[index + 3];
+          if (alpha < 24) continue;
+          const rgb = this.converter.matteToWhite(
+            imageData[index],
+            imageData[index + 1],
+            imageData[index + 2],
+            alpha,
+          );
+          if (isNearWhite(rgb)) continue;
+          boxMinX = Math.min(boxMinX, x);
+          boxMaxX = Math.max(boxMaxX, x);
+          boxMinY = Math.min(boxMinY, y);
+          boxMaxY = Math.max(boxMaxY, y);
+          color.r += rgb[0];
+          color.g += rgb[1];
+          color.b += rgb[2];
+          color.count += 1;
+        }
+      }
+
+      if (boxMaxX < boxMinX || !color.count) return null;
+
+      return {
+        minX: boxMinX,
+        maxX: boxMaxX,
+        minY: boxMinY,
+        maxY: boxMaxY,
+        width: boxMaxX - boxMinX + 1,
+        height: boxMaxY - boxMinY + 1,
+        rgb: [
+          Math.round(color.r / color.count),
+          Math.round(color.g / color.count),
+          Math.round(color.b / color.count),
+        ],
+      };
+    };
+
+    const topLine = buildLineBox(titleGroup.minY, splitY);
+    const bottomLine = buildLineBox(splitY + 1, titleGroup.maxY);
+    if (!topLine || !bottomLine) return null;
+
+    return {
+      sourceWidth,
+      sourceHeight,
+      minX: Math.min(topLine.minX, bottomLine.minX),
+      maxX: Math.max(topLine.maxX, bottomLine.maxX),
+      minY: Math.min(topLine.minY, bottomLine.minY),
+      maxY: Math.max(topLine.maxY, bottomLine.maxY),
+      lines: [topLine, bottomLine],
+    };
+  }
+
+  _applySbtiSourceTitleOverlay(srcImage, palette) {
+    if (!this.pattern) return;
+
+    const overlay = this._extractSbtiSourceTitleOverlay(srcImage);
+    if (!overlay || !overlay.lines || overlay.lines.length < 2) return;
+
+    const preparedPalette = this.converter.preparePalette(palette);
+    const bgColor = this._pickSbtiTitleBackground(palette);
+    const lineConfigs = overlay.lines.map((line, index) => {
+      const rawWidth = Math.max(1, Math.round(line.width * this.pattern.width / overlay.sourceWidth));
+      const rawHeight = Math.max(1, Math.round(line.height * this.pattern.height / overlay.sourceHeight));
+      const minHeight = index === 0 ? 5 : 4;
+      const scale = Math.max(1, minHeight / rawHeight);
+      return {
+        line,
+        color: this.converter.findNearest(line.rgb[0], line.rgb[1], line.rgb[2], preparedPalette),
+        targetWidth: Math.max(1, Math.min(this.pattern.width - 4, Math.max(rawWidth + 2, Math.round(rawWidth * scale)))),
+        targetHeight: Math.max(minHeight, Math.round(rawHeight * scale)),
+        threshold: index === 0 ? 0.18 : 0.16,
+      };
+    });
+
+    const gap = 2;
+    const totalHeight = lineConfigs[0].targetHeight + gap + lineConfigs[1].targetHeight;
+    let startY = Math.max(
+      1,
+      Math.round((((overlay.minY + overlay.maxY) / 2) * this.pattern.height / overlay.sourceHeight) - totalHeight / 2),
+    );
+    if (startY + totalHeight >= this.pattern.height) {
+      startY = Math.max(1, this.pattern.height - totalHeight - 1);
+    }
+
+    const placements = lineConfigs.map((cfg, index) => {
+      const centerX = ((cfg.line.minX + cfg.line.maxX + 1) / 2) * this.pattern.width / overlay.sourceWidth;
+      const maxStartX = Math.max(0, this.pattern.width - cfg.targetWidth);
+      let lineStartX = Math.round(centerX - cfg.targetWidth / 2);
+      lineStartX = Math.max(0, Math.min(maxStartX, lineStartX));
+      return {
+        startX: lineStartX,
+        startY: index === 0 ? startY : startY + lineConfigs[0].targetHeight + gap,
+      };
+    });
+
+    const cvs = document.createElement('canvas');
+    cvs.width = overlay.sourceWidth;
+    cvs.height = overlay.sourceHeight;
+    const ctx = cvs.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(srcImage, 0, 0, overlay.sourceWidth, overlay.sourceHeight);
+    const imageData = ctx.getImageData(0, 0, overlay.sourceWidth, overlay.sourceHeight).data;
+    const isNearWhite = (rgb) => {
+      const max = Math.max(rgb[0], rgb[1], rgb[2]);
+      const min = Math.min(rgb[0], rgb[1], rgb[2]);
+      return max >= 242 && (max - min) <= 12;
+    };
+
+    let clearMinX = this.pattern.width;
+    let clearMaxX = -1;
+    let clearMinY = this.pattern.height;
+    let clearMaxY = -1;
+
+    placements.forEach((placement, index) => {
+      const cfg = lineConfigs[index];
+      clearMinX = Math.min(clearMinX, placement.startX - 1);
+      clearMaxX = Math.max(clearMaxX, placement.startX + cfg.targetWidth);
+      clearMinY = Math.min(clearMinY, placement.startY - 1);
+      clearMaxY = Math.max(clearMaxY, placement.startY + cfg.targetHeight);
+    });
+
+    clearMinX = Math.max(0, clearMinX);
+    clearMaxX = Math.min(this.pattern.width - 1, clearMaxX);
+    clearMinY = Math.max(0, clearMinY);
+    clearMaxY = Math.min(this.pattern.height - 1, clearMaxY);
+
+    for (let y = clearMinY; y <= clearMaxY; y++) {
+      for (let x = clearMinX; x <= clearMaxX; x++) {
+        this.pattern.grid[y][x] = bgColor;
+      }
+    }
+
+    const sampleResolution = 7;
+    const paintLine = (cfg, placement) => {
+      for (let y = 0; y < cfg.targetHeight; y++) {
+        const y0 = cfg.line.minY + y * cfg.line.height / cfg.targetHeight;
+        const y1 = cfg.line.minY + (y + 1) * cfg.line.height / cfg.targetHeight;
+        for (let x = 0; x < cfg.targetWidth; x++) {
+          const x0 = cfg.line.minX + x * cfg.line.width / cfg.targetWidth;
+          const x1 = cfg.line.minX + (x + 1) * cfg.line.width / cfg.targetWidth;
+          let inkSamples = 0;
+          let totalSamples = 0;
+
+          for (let sy = 0; sy < sampleResolution; sy++) {
+            const fy = y0 + (sy + 0.5) * (y1 - y0) / sampleResolution;
+            const py = Math.min(overlay.sourceHeight - 1, Math.max(0, Math.floor(fy)));
+            for (let sx = 0; sx < sampleResolution; sx++) {
+              const fx = x0 + (sx + 0.5) * (x1 - x0) / sampleResolution;
+              const px = Math.min(overlay.sourceWidth - 1, Math.max(0, Math.floor(fx)));
+              const index = (py * overlay.sourceWidth + px) * 4;
+              const alpha = imageData[index + 3];
+              if (alpha < 24) continue;
+              totalSamples += 1;
+              const rgb = this.converter.matteToWhite(
+                imageData[index],
+                imageData[index + 1],
+                imageData[index + 2],
+                alpha,
+              );
+              if (!isNearWhite(rgb)) inkSamples += 1;
+            }
+          }
+
+          if (!totalSamples || inkSamples / totalSamples < cfg.threshold) continue;
+          this.pattern.grid[placement.startY + y][placement.startX + x] = cfg.color;
+        }
+      }
+    };
+
+    paintLine(lineConfigs[0], placements[0]);
+    paintLine(lineConfigs[1], placements[1]);
+
+    this._recountPattern();
+  }
+
+  _recountPattern() {
+    if (!this.pattern) return;
+    const colorCounts = {};
+    let totalBeads = 0;
+    for (const row of this.pattern.grid) {
+      for (const cell of row) {
+        if (!cell) continue;
+        colorCounts[cell.code] = (colorCounts[cell.code] || 0) + 1;
+        totalBeads++;
+      }
+    }
+    this.pattern.colorCounts = colorCounts;
+    this.pattern.totalBeads = totalBeads;
+    this.pattern.uniqueColors = Object.keys(colorCounts).length;
+  }
+
+  _applySbtiTitleOverlay(srcImage, palette) {
+    const meta = this._galleryTitlePattern;
+    if (!meta || !meta.image || !meta.image.includes('images/sbti_v2/') || !this.pattern) return;
+    if (meta.titleOverlayMode === 'pixel-template') {
+      this._applySbtiPixelTemplateOverlay(srcImage, palette, meta);
+      return;
+    }
+    if (meta.titleOverlayMode === 'text-dual') {
+      this._applySbtiTextTitleOverlay(srcImage, palette, meta);
+      return;
+    }
+    if (meta.titleOverlayMode === 'source') {
+      this._applySbtiSourceTitleOverlay(srcImage, palette);
+      return;
+    }
+
+    const template = this._getSbtiTitleTemplate();
+    if (!template) return;
+
+    const titleColor = this._pickSbtiTitleColor(srcImage, palette);
+    const bgColor = this._pickSbtiTitleBackground(palette);
+    const startX = Math.max(0, Math.round((this.pattern.width - template.width) / 2));
+    const startY = 1;
+
+    for (let rowIndex = 0; rowIndex < template.rows.length; rowIndex++) {
+      const y = startY + rowIndex;
+      if (y >= this.pattern.height) continue;
+      for (let colIndex = 0; colIndex < template.width; colIndex++) {
+        const x = startX + colIndex;
+        if (x < 0 || x >= this.pattern.width) continue;
+        this.pattern.grid[y][x] = bgColor;
+      }
+    }
+
+    template.rows.forEach((rowStr, rowIndex) => {
+      const y = startY + rowIndex;
+      if (y >= this.pattern.height) return;
+      rowStr.split(',').forEach((code, colIndex) => {
+        const token = code.trim();
+        if (token === '.' || token === '') return;
+        const x = startX + colIndex;
+        if (x < 0 || x >= this.pattern.width) return;
+        this.pattern.grid[y][x] = titleColor;
+      });
+    });
+
+    this._recountPattern();
+  }
+
   _setRestoreStatus(message, tone = 'info') {
     const el = document.getElementById('restoreStatus');
     if (!el) return;
@@ -621,6 +1324,18 @@ class BeadPatternApp {
     el.className = `restore-status restore-status-${tone}`;
   }
 
+  _setRestorePanelStatus(message, tone = 'info') {
+    const el = document.getElementById('restorePanelStatus');
+    if (!el) return;
+    if (!message) {
+      el.textContent = '';
+      el.className = 'restore-panel-status hidden';
+      return;
+    }
+    el.textContent = message;
+    el.className = `restore-panel-status restore-panel-status-${tone}`;
+  }
+
   _syncRestoreUI() {
     const btn = document.getElementById('restoreBtn');
     if (!btn) return;
@@ -628,26 +1343,188 @@ class BeadPatternApp {
     btn.disabled = this._restoreBusy || !hasImage;
     btn.textContent = this._restoredSource && this._restoreOriginalDataUrl
       ? '↺ 恢复导入图'
-      : '🪄 智能还原原图';
+      : '🪄 像素还原';
+  }
+
+  _syncRestorePanelControls() {
+    document.querySelectorAll('[data-restore-mode]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.restoreMode === this._restoreMode);
+    });
+
+    const scale = document.getElementById('restoreScale');
+    if (scale) scale.value = String(this._restoreScale);
+
+    const applyBtn = document.getElementById('restoreApplyBtn');
+    if (applyBtn) {
+      applyBtn.disabled = this._restoreBusy || !this._restorePreviewDataUrl;
+      applyBtn.textContent = this._restoreBusy ? '处理中…' : '应用结果到主图';
+    }
+
+    const meta = document.getElementById('restoreMeta');
+    if (!meta) return;
+    if (this._restorePreviewMeta) {
+      const { sampledWidth, sampledHeight, outputWidth, outputHeight, mode, passes, scale: outputScale } = this._restorePreviewMeta;
+      meta.textContent = mode === 'smooth'
+        ? `提取 ${sampledWidth} × ${sampledHeight} 格子颜色 -> 平滑插画 ${outputScale}x -> 输出 ${outputWidth} × ${outputHeight}`
+        : `提取 ${sampledWidth} × ${sampledHeight} 格子颜色 -> 像素底图 ${outputScale}x -> 输出 ${outputWidth} × ${outputHeight}`;
+      return;
+    }
+
+    const width = parseInt(document.getElementById('widthSlider')?.value, 10) || 50;
+    meta.textContent = `将按当前珠子宽度 ${width} 提取格子颜色`;
+  }
+
+  _openRestoreModal() {
+    const modal = document.getElementById('pixelRestoreModal');
+    const sourceDataUrl = this._getActivePreviewDataUrl();
+    if (!modal || !sourceDataUrl) {
+      this._setRestoreStatus('请先导入一张图片。', 'error');
+      return;
+    }
+
+    const originalImg = document.getElementById('restoreOriginalImg');
+    if (originalImg) originalImg.src = sourceDataUrl;
+
+    modal.classList.remove('hidden');
+    this._restorePreviewDataUrl = '';
+    this._restorePreviewMeta = null;
+    this._setRestorePanelStatus('正在浏览器本地提取格子颜色并生成预览...', 'info');
+    this._syncRestorePanelControls();
+    this._renderRestorePreview();
+  }
+
+  _closeRestoreModal() {
+    const modal = document.getElementById('pixelRestoreModal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  async _revertRestoredImage() {
+    this._restoreBusy = true;
+    this._syncRestoreUI();
+    this._syncRestorePanelControls();
+    this._setRestoreStatus('正在恢复原导入图...', 'info');
+    try {
+      await this._applyImageDataUrl(this._restoreOriginalDataUrl);
+      this._setRestoreStatus('已恢复原导入图。', 'success');
+      trackEvent('image_restore_revert');
+    } catch (error) {
+      this._setRestoreStatus(error.message || '恢复失败，请重新导入图片', 'error');
+    } finally {
+      this._restoreBusy = false;
+      this._syncRestoreUI();
+      this._syncRestorePanelControls();
+    }
+  }
+
+  async _renderRestorePreview() {
+    const srcImage = this.croppedImage || this.image;
+    const restoreCanvas = document.getElementById('restoreResultCanvas');
+    if (!srcImage || !restoreCanvas) return;
+    if (typeof PixelRestoreEngine === 'undefined') {
+      this._setRestorePanelStatus('像素还原模块未加载，请刷新页面后重试。', 'error');
+      return;
+    }
+
+    const renderToken = ++this._restoreRenderToken;
+    const gridWidth = parseInt(document.getElementById('widthSlider')?.value, 10) || 50;
+
+    this._restoreBusy = true;
+    this._restorePreviewDataUrl = '';
+    this._restorePreviewMeta = null;
+    this._syncRestoreUI();
+    this._syncRestorePanelControls();
+    this._setRestorePanelStatus(
+      this._restoreMode === 'smooth'
+        ? '正在本地生成平滑插画预览...' : '正在本地生成像素底图预览...',
+      'info'
+    );
+
+    await new Promise(resolve => requestAnimationFrame(resolve));
+
+    try {
+      const result = PixelRestoreEngine.restore(srcImage, {
+        gridWidth,
+        mode: this._restoreMode,
+        scale: this._restoreScale,
+      });
+      if (renderToken !== this._restoreRenderToken) return;
+
+      restoreCanvas.width = result.outputWidth;
+      restoreCanvas.height = result.outputHeight;
+      const ctx = restoreCanvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, restoreCanvas.width, restoreCanvas.height);
+      ctx.drawImage(result.outputCanvas, 0, 0);
+
+      this._restorePreviewDataUrl = result.outputCanvas.toDataURL('image/png');
+      this._restorePreviewMeta = result;
+      this._setRestorePanelStatus(
+        result.mode === 'smooth'
+          ? `已提取 ${result.sampledWidth} × ${result.sampledHeight} 的格子颜色，并生成平滑插画输出。`
+          : `已提取 ${result.sampledWidth} × ${result.sampledHeight} 的格子颜色，并生成像素底图输出。`,
+        'success'
+      );
+    } catch (error) {
+      if (renderToken !== this._restoreRenderToken) return;
+      this._setRestorePanelStatus(error.message || '本地还原失败，请换一张图片再试。', 'error');
+    } finally {
+      if (renderToken === this._restoreRenderToken) {
+        this._restoreBusy = false;
+        this._syncRestoreUI();
+        this._syncRestorePanelControls();
+      }
+    }
+  }
+
+  async _applyRestorePreview() {
+    if (!this._restorePreviewDataUrl || !this._restorePreviewMeta) {
+      this._setRestorePanelStatus('请先等待预览生成完成。', 'error');
+      return;
+    }
+
+    const originalPreview = this._getActivePreviewDataUrl();
+    if (!originalPreview) {
+      this._setRestorePanelStatus('请先导入一张图片。', 'error');
+      return;
+    }
+
+    const meta = this._restorePreviewMeta;
+    this._restoreBusy = true;
+    this._syncRestoreUI();
+    this._syncRestorePanelControls();
+    this._setRestorePanelStatus('正在应用还原结果到主图...', 'info');
+
+    try {
+      await this._applyImageDataUrl(this._restorePreviewDataUrl, { preserveRestoreBase: true });
+      this._restoreOriginalDataUrl = originalPreview;
+      this._restoredSource = true;
+      this._closeRestoreModal();
+      this._setRestoreStatus(
+        meta.mode === 'smooth'
+          ? `已在浏览器本地提取 ${meta.sampledWidth} × ${meta.sampledHeight} 的格子颜色，并输出 ${meta.outputWidth} × ${meta.outputHeight} 的平滑插画。`
+          : `已在浏览器本地提取 ${meta.sampledWidth} × ${meta.sampledHeight} 的格子颜色，并输出 ${meta.outputWidth} × ${meta.outputHeight} 的像素底图。`,
+        'success'
+      );
+      trackEvent('image_restore', {
+        width: meta.sampledWidth,
+        height: meta.sampledHeight,
+        mode: meta.mode,
+        scale: meta.scale,
+      });
+    } catch (error) {
+      this._setRestorePanelStatus(error.message || '应用失败，请稍后再试。', 'error');
+    } finally {
+      this._restoreBusy = false;
+      this._syncRestoreUI();
+      this._syncRestorePanelControls();
+    }
   }
 
   async _restoreSourceImage() {
     if (this._restoreBusy) return;
 
     if (this._restoredSource && this._restoreOriginalDataUrl) {
-      this._restoreBusy = true;
-      this._syncRestoreUI();
-      this._setRestoreStatus('正在恢复原导入图...', 'info');
-      try {
-        await this._applyImageDataUrl(this._restoreOriginalDataUrl);
-        this._setRestoreStatus('已恢复原导入图。', 'success');
-        trackEvent('image_restore_revert');
-      } catch (error) {
-        this._setRestoreStatus(error.message || '恢复失败，请重新导入图片', 'error');
-      } finally {
-        this._restoreBusy = false;
-        this._syncRestoreUI();
-      }
+      await this._revertRestoredImage();
       return;
     }
 
@@ -657,41 +1534,7 @@ class BeadPatternApp {
       return;
     }
 
-    this._restoreBusy = true;
-    this._syncRestoreUI();
-    this._setRestoreStatus('正在智能还原原图...', 'info');
-
-    try {
-      const beadWidth = parseInt(document.getElementById('widthSlider').value, 10) || 50;
-      const response = await fetch(`${API_BASE}/api/image/restore`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image_data: activeDataUrl,
-          bead_width: beadWidth
-        })
-      });
-      const data = await response.json();
-      if (!response.ok || data.error) {
-        throw new Error(data.error || '还原失败，请稍后再试');
-      }
-
-      const originalPreview = activeDataUrl;
-      await this._applyImageDataUrl(data.image_data, { preserveRestoreBase: true });
-      this._restoreOriginalDataUrl = originalPreview;
-      this._restoredSource = true;
-      this._syncRestoreUI();
-      this._setRestoreStatus(
-        `已还原为干净像素原图（按 ${data.grid_width} × ${data.grid_height} 采样）。接下来点“生成图案”即可。`,
-        'success'
-      );
-      trackEvent('image_restore', { width: data.grid_width, height: data.grid_height, mode: data.mode || 'local' });
-    } catch (error) {
-      this._setRestoreStatus(error.message || '还原失败，请稍后再试', 'error');
-    } finally {
-      this._restoreBusy = false;
-      this._syncRestoreUI();
-    }
+    this._openRestoreModal();
   }
 
   _setXhsStatus(message, tone = 'info') {
@@ -813,7 +1656,7 @@ class BeadPatternApp {
 
   _openGallery() {
     const modal = document.getElementById('galleryModal');
-    if (!this._galleryMode) this._galleryMode = 'sbti';
+    if (!this._galleryMode) this._galleryMode = 'pattern';
 
     // Mode switch buttons
     modal.querySelectorAll('.gallery-mode-btn').forEach(btn => {
@@ -950,7 +1793,7 @@ class BeadPatternApp {
           const ii = parseInt(el.dataset.idx);
           const item = source[ci].items[ii];
           if (item.image) {
-            this._loadImageFromUrl(item.image, item.name);
+            this._loadImageFromUrl(item.image, item.name, 'gallery', item);
           } else {
             this._loadPattern(item);
           }
@@ -977,6 +1820,7 @@ class BeadPatternApp {
   }
 
   _loadPattern(patternData) {
+    this._galleryTitlePattern = null;
     const brand = document.getElementById('brandSelect').value;
     const palette = BEAD_PALETTES[brand].colors;
     this.pattern = decodePattern(patternData, palette);
@@ -986,6 +1830,7 @@ class BeadPatternApp {
     this._imageDataUrl = '';
     this._restoreOriginalDataUrl = '';
     this._restoredSource = false;
+    this._resetRestorePreviewState();
     this._setRestoreStatus('');
     this._syncRestoreUI();
     this._setLandingShowcaseHidden(true);
@@ -996,6 +1841,7 @@ class BeadPatternApp {
     document.getElementById('exportBtn').disabled = false;
     document.getElementById('exportPdfBtn').disabled = false;
     document.getElementById('compareBtn').classList.add('hidden');
+    document.getElementById('fullscreenBtn').classList.remove('hidden');
     trackEvent('load_pattern', { name: patternData.name, w: patternData.width });
   }
 
@@ -1034,6 +1880,7 @@ class BeadPatternApp {
       // Apply image adjustments
       const adjustedImage = this._applyAdjustments(srcImage);
       this.pattern = this.converter.convert(adjustedImage, width, palette, maxColors);
+      this._applySbtiTitleOverlay(adjustedImage, palette);
 
       // Auto-detect background color from the outer edge only.
       // Using the most common color hides large single-color subjects like emoji fills.
@@ -1047,6 +1894,7 @@ class BeadPatternApp {
       document.getElementById('exportBtn').disabled = false;
       document.getElementById('exportPdfBtn').disabled = false;
       document.getElementById('compareBtn').classList.remove('hidden');
+      document.getElementById('fullscreenBtn').classList.remove('hidden');
 
       // Start 1-min timer to prompt registration (only if not logged in)
       if (!this.auth.isLoggedIn) {
@@ -1618,6 +2466,46 @@ class BeadPatternApp {
     a.download = `bead-pattern-${W}x${H}.png`;
     a.href = cvs.toDataURL('image/png');
     a.click();
+  }
+
+  /* ═══════════ Fullscreen ═══════════ */
+
+  _toggleFullscreen() {
+    const container = document.querySelector('.pattern-container');
+    const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (isFs) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      return;
+    }
+    if (container.classList.contains('fake-fullscreen')) {
+      container.classList.remove('fake-fullscreen');
+      document.getElementById('fullscreenBtn').textContent = '⛶';
+      this._fitAndDraw();
+      return;
+    }
+    // Try native fullscreen with timeout fallback
+    const tryNative = container.requestFullscreen || container.webkitRequestFullscreen;
+    if (tryNative) {
+      const timer = setTimeout(() => {
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) this._fakeFull(container);
+      }, 300);
+      const p = tryNative.call(container);
+      if (p && p.then) p.catch(() => { clearTimeout(timer); this._fakeFull(container); });
+    } else {
+      this._fakeFull(container);
+    }
+  }
+
+  _fakeFull(container) {
+    container.classList.add('fake-fullscreen');
+    document.getElementById('fullscreenBtn').textContent = '✕';
+    this._fitAndDraw();
+  }
+
+  _onFullscreenChange() {
+    const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+    document.getElementById('fullscreenBtn').textContent = isFs ? '✕' : '⛶';
+    // ResizeObserver will auto-trigger _fitAndDraw
   }
 
   /* ═══════════ Original / Pattern Comparison ═══════════ */

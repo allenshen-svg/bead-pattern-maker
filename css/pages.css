@@ -1,0 +1,268 @@
+/* ── Shared styles for content pages ── */
+.page-nav {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.page-nav a {
+  color: var(--pri);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid transparent;
+  transition: .2s;
+}
+.page-nav a:hover {
+  background: rgba(99,102,241,.06);
+  border-color: rgba(99,102,241,.2);
+}
+.page-nav a.active {
+  background: var(--pri);
+  color: #fff;
+}
+
+/* ── Article content ── */
+.page-content {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 20px 0;
+}
+.page-content h2 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 36px 0 14px;
+  color: var(--tx);
+}
+.page-content h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 28px 0 10px;
+  color: var(--tx);
+}
+.page-content p {
+  font-size: 15px;
+  line-height: 1.85;
+  color: #334155;
+  margin-bottom: 14px;
+}
+.page-content ul, .page-content ol {
+  padding-left: 22px;
+  margin-bottom: 14px;
+}
+.page-content li {
+  font-size: 15px;
+  line-height: 1.85;
+  color: #334155;
+  margin-bottom: 6px;
+}
+.page-content img {
+  max-width: 100%;
+  border-radius: var(--r);
+  border: 1px solid var(--bd);
+  margin: 12px 0;
+}
+.page-content a {
+  color: var(--pri);
+  text-decoration: none;
+}
+.page-content a:hover {
+  text-decoration: underline;
+}
+.page-content strong {
+  color: var(--tx);
+}
+
+/* ── Hero banner ── */
+.page-hero {
+  text-align: center;
+  padding: 40px 20px 0;
+}
+.page-hero h1 {
+  font-size: 28px;
+  font-weight: 700;
+}
+.page-hero p {
+  color: var(--tx2);
+  font-size: 15px;
+  margin-top: 8px;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ── CTA box ── */
+.page-cta {
+  text-align: center;
+  margin: 36px 0;
+  padding: 28px 20px;
+  background: linear-gradient(135deg, rgba(99,102,241,.06), rgba(99,102,241,.02));
+  border: 1px solid rgba(99,102,241,.15);
+  border-radius: 12px;
+}
+.page-cta h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+.page-cta p {
+  margin: 0 0 16px;
+  color: var(--tx2);
+}
+.page-cta .btn-primary {
+  display: inline-block;
+  padding: 10px 28px;
+  background: var(--pri);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: .2s;
+}
+.page-cta .btn-primary:hover {
+  background: var(--pri-h);
+  text-decoration: none;
+}
+
+/* ── Steps ── */
+.steps {
+  counter-reset: step;
+}
+.step-item {
+  position: relative;
+  padding: 16px 20px 16px 60px;
+  margin-bottom: 12px;
+  background: var(--sf);
+  border: 1px solid var(--bd);
+  border-radius: var(--r);
+}
+.step-item::before {
+  counter-increment: step;
+  content: counter(step);
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  width: 32px;
+  height: 32px;
+  background: var(--pri);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+}
+.step-item h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.step-item p {
+  font-size: 14px;
+  color: var(--tx2);
+  margin: 0;
+}
+
+/* ── Color table ── */
+.color-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14px;
+}
+.color-table th {
+  background: var(--sf-h);
+  text-align: left;
+  padding: 10px 14px;
+  font-weight: 600;
+  border-bottom: 2px solid var(--bd);
+}
+.color-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--bd);
+}
+.color-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--bd);
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+/* ── Brand cards ── */
+.brand-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+.brand-card {
+  background: var(--sf);
+  border: 1px solid var(--bd);
+  border-radius: var(--r);
+  padding: 20px;
+}
+.brand-card h4 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.brand-card .brand-count {
+  color: var(--pri);
+  font-weight: 700;
+  font-size: 24px;
+}
+.brand-card p {
+  font-size: 13px;
+  color: var(--tx2);
+  margin: 6px 0 0;
+}
+
+/* ── FAQ on sub-pages ── */
+.page-faq details {
+  background: var(--sf);
+  border: 1px solid var(--bd);
+  border-radius: var(--r);
+  margin-bottom: 8px;
+  padding: 14px 16px;
+}
+.page-faq summary {
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 15px;
+  color: var(--tx);
+}
+.page-faq details p {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--tx2);
+}
+
+/* ── Breadcrumb ── */
+.breadcrumb {
+  max-width: 860px;
+  margin: 12px auto 0;
+  padding: 0 20px;
+  font-size: 13px;
+  color: var(--tx2);
+}
+.breadcrumb a {
+  color: var(--pri);
+  text-decoration: none;
+}
+.breadcrumb a:hover { text-decoration: underline; }
+.breadcrumb span { margin: 0 6px; }
+
+@media (max-width: 600px) {
+  .page-hero h1 { font-size: 22px; }
+  .page-content { padding: 20px 16px 0; }
+  .page-content h2 { font-size: 19px; }
+  .brand-cards { grid-template-columns: 1fr; }
+}
